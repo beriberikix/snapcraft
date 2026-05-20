@@ -63,6 +63,14 @@ companion tools have features for identifying and resolving such issues.
 - :ref:`how-to-debug-with-gdb`
 
 
+Analysis
+--------
+
+Before packaging a project, you can inspect it for snap-readiness issues.
+
+- :ref:`how-to-analyze`
+
+
 Change bases
 ------------
 
@@ -82,4 +90,5 @@ to reconfigure your project as described by these guides.
     extensions/index
     publishing/index
     debugging/index
+    analyze-repository
     change-bases/index

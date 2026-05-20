@@ -13,6 +13,7 @@ Snapcraft is operated from the command line, with a command for each function.
 
 - :ref:`reference-commands`
 - :ref:`reference-build-environment-options`
+- :ref:`reference-analyze`
 
 
 Project file
@@ -62,6 +63,7 @@ support (LTS) for it.
     snapcraft-yaml
     commands
     build-environment-options
+    analyze
     bases
     platforms
     parts-steps
