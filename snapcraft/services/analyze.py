@@ -40,13 +40,6 @@ if TYPE_CHECKING:
 # Interface plug inference
 # ---------------------------------------------------------------------------
 
-# Findings that imply a specific plug.
-_PLUG_TRIGGERS: list[tuple[str, str, str, bool]] = [
-    # (metadata_key, metadata_value_contains, plug_name, auto_connect)
-    ("plug_hint", "network-bind", "network-bind", True),
-    ("plug_hint", "network", "network", True),
-]
-
 _HARDWARE_PLUG_PATTERNS = {
     "serial-port": "Serial port or UART device detected.",
     "i2c": "I2C bus usage detected.",

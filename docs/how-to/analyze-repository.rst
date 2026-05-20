@@ -1,3 +1,6 @@
+.. meta::
+    :description: How to use snapcraft analyze to inspect a repository for snap packaging readiness, interpret the output, and generate a best-effort snapcraft.yaml scaffold.
+
 .. _how-to-analyze:
 
 Analyze a repository for snap packaging

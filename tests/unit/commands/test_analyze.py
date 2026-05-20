@@ -19,17 +19,14 @@
 from __future__ import annotations
 
 import argparse
-import json
-import sys
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+from craft_cli.errors import ArgumentParsingError
 
 from snapcraft.analyze.models import AnalysisReport, BuildSystemInfo, ScaffoldResult
 from snapcraft.commands.analyze import AnalyzeCommand
 from snapcraft.const import OutputFormat
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -158,8 +155,6 @@ class TestAnalyzeCommandRun:
         mock_fmt.assert_called_once_with(fake_report, OutputFormat.json)
 
     def test_run_raises_for_nonexistent_path(self, tmp_path):
-        from craft_cli.errors import ArgumentParsingError
-
         cmd = AnalyzeCommand(None)
         args = argparse.Namespace(
             path=str(tmp_path / "does-not-exist"),
@@ -170,8 +165,6 @@ class TestAnalyzeCommandRun:
             cmd.run(args)
 
     def test_run_raises_for_file_path(self, tmp_path):
-        from craft_cli.errors import ArgumentParsingError
-
         f = tmp_path / "file.txt"
         f.write_text("hello")
         cmd = AnalyzeCommand(None)

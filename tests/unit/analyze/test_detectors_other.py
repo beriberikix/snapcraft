@@ -16,13 +16,12 @@
 
 """Tests for the Docker, systemd, and Ubuntu Frame detectors."""
 
-import pytest
+import json
 
 from snapcraft.analyze.detectors.docker import DockerDetector
 from snapcraft.analyze.detectors.systemd import SystemdDetector
 from snapcraft.analyze.detectors.ubuntu_frame import UbuntuFrameDetector
 from snapcraft.analyze.models import FindingCategory, Severity
-
 
 # ===========================================================================
 # Docker
@@ -35,19 +34,21 @@ class TestDockerDetector:
 
     def test_dockerfile_with_go_base(self, tmp_path):
         (tmp_path / "Dockerfile").write_text(
-            "FROM golang:1.22\nRUN apt-get install -y git\nCMD [\"/app/server\"]\n"
+            'FROM golang:1.22\nRUN apt-get install -y git\nCMD ["/app/server"]\n'
         )
         findings = DockerDetector(tmp_path).detect()
-        plugin_hints = [
-            f.metadata.get("plugin_hint")
+        # The FROM finding now emits a BuildSystemInfo-compatible payload
+        # with a "plugin" key (not the old "plugin_hint").
+        plugins = [
+            f.metadata.get("plugin")
             for f in findings
-            if "plugin_hint" in f.metadata
+            if "plugin" in f.metadata
         ]
-        assert "go" in plugin_hints
+        assert "go" in plugins
 
     def test_expose_triggers_network_bind(self, tmp_path):
         (tmp_path / "Dockerfile").write_text(
-            "FROM python:3.12\nEXPOSE 8080\nCMD [\"python\", \"app.py\"]\n"
+            'FROM python:3.12\nEXPOSE 8080\nCMD ["python", "app.py"]\n'
         )
         findings = DockerDetector(tmp_path).detect()
         network_hints = [
@@ -58,7 +59,7 @@ class TestDockerDetector:
 
     def test_user_root_emits_error(self, tmp_path):
         (tmp_path / "Dockerfile").write_text(
-            "FROM ubuntu:24.04\nUSER root\nCMD [\"bash\"]\n"
+            'FROM ubuntu:24.04\nUSER root\nCMD ["bash"]\n'
         )
         findings = DockerDetector(tmp_path).detect()
         errors = [
@@ -70,19 +71,21 @@ class TestDockerDetector:
 
     def test_cmd_directive_extracts_command(self, tmp_path):
         (tmp_path / "Dockerfile").write_text(
-            "FROM golang:1.22\nCMD [\"/usr/local/bin/myservice\", \"--config\", \"/etc/myservice.conf\"]\n"
+            'FROM golang:1.22\nCMD ["/usr/local/bin/myservice", "--config", "/etc/myservice.conf"]\n'
         )
         findings = DockerDetector(tmp_path).detect()
-        cmd_hints = [
-            f.metadata.get("command_hint")
+        # The CMD finding now emits a DaemonInfo-compatible payload
+        # with a "command" key (not the old "command_hint").
+        commands = [
+            f.metadata.get("command")
             for f in findings
-            if "command_hint" in f.metadata
+            if "command" in f.metadata
         ]
-        assert any("myservice" in str(h) for h in cmd_hints)
+        assert any("myservice" in str(c) for c in commands)
 
     def test_hardcoded_path_in_deep_mode(self, tmp_path):
         (tmp_path / "Dockerfile").write_text(
-            "FROM ubuntu:24.04\nRUN mkdir /etc/myapp\nCMD [\"myapp\"]\n"
+            'FROM ubuntu:24.04\nRUN mkdir /etc/myapp\nCMD ["myapp"]\n'
         )
         findings = DockerDetector(tmp_path, deep=True).detect()
         path_warnings = [
@@ -93,7 +96,7 @@ class TestDockerDetector:
 
     def test_hardcoded_path_not_in_shallow_mode(self, tmp_path):
         (tmp_path / "Dockerfile").write_text(
-            "FROM ubuntu:24.04\nRUN mkdir /etc/myapp\nCMD [\"myapp\"]\n"
+            'FROM ubuntu:24.04\nRUN mkdir /etc/myapp\nCMD ["myapp"]\n'
         )
         findings = DockerDetector(tmp_path, deep=False).detect()
         path_warnings = [
@@ -104,7 +107,7 @@ class TestDockerDetector:
 
     def test_dockerfile_variant_filename(self, tmp_path):
         (tmp_path / "Dockerfile.prod").write_text(
-            "FROM python:3.12\nCMD [\"python\", \"app.py\"]\n"
+            'FROM python:3.12\nCMD ["python", "app.py"]\n'
         )
         findings = DockerDetector(tmp_path).detect()
         assert len(findings) > 0
@@ -233,7 +236,6 @@ class TestUbuntuFrameDetector:
         assert any(f.metadata.get("is_ubuntu_frame_app") for f in findings)
 
     def test_electron_package_json_detected(self, tmp_path):
-        import json
         (tmp_path / "package.json").write_text(
             json.dumps({
                 "name": "kiosk-electron",
@@ -255,9 +257,9 @@ class TestUbuntuFrameDetector:
         src = tmp_path / "src"
         src.mkdir()
         (src / "main.c").write_text(
-            '#include <stdio.h>\n'
-            '#include <wayland-client.h>\n'
-            'int main() { return 0; }\n'
+            "#include <stdio.h>\n"
+            "#include <wayland-client.h>\n"
+            "int main() { return 0; }\n"
         )
         # Shallow scan should NOT find it (no build config).
         findings_shallow = UbuntuFrameDetector(tmp_path, deep=False).detect()

@@ -1,8 +1,10 @@
+.. meta::
+    :description: Reference for the snapcraft analyze command. Covers synopsis, options, JSON output schema, supported build-system ecosystems, and examples.
+
 .. _reference-analyze:
 
 ``snapcraft analyze``
 =====================
-
 Analyses a local repository for snap packaging readiness.
 
 The command is non-destructive (read-only).  It never modifies the repository

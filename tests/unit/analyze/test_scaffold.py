@@ -16,15 +16,14 @@
 
 """Tests for the YAML scaffold generator."""
 
-import pytest
 import yaml
 
 from snapcraft.analyze.models import (
     AnalysisReport,
     BuildSystemInfo,
     DaemonInfo,
-    FindingCategory,
     DetectorFinding,
+    FindingCategory,
     PlugInfo,
     Severity,
 )

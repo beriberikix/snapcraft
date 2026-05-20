@@ -265,14 +265,19 @@ def _scan_source_files(
 
             # Privileged sockets.
             for pattern in _PRIVILEGED_SOCKETS:
-                if re.search(pattern, text):
+                m = re.search(pattern, text)
+                if m:
+                    matched_path = m.group(0)
+                    # Find the line number of the match.
+                    lineno = text[: m.start()].count("\n") + 1
                     warning = ConfinementWarning(
                         violation_type="privileged-socket",
                         description=(
-                            f"Privileged socket path '{pattern}' referenced "
+                            f"Privileged socket path '{matched_path}' referenced "
                             f"in '{rel}'."
                         ),
                         file=rel,
+                        line=lineno,
                         suggested_fix=(
                             "Accessing privileged sockets (e.g. Docker, "
                             "containerd) from a snap requires the "
@@ -286,10 +291,11 @@ def _scan_source_files(
                             severity=Severity.ERROR,
                             description=warning.description,
                             file=rel,
+                            line=lineno,
                             suggested_fix=warning.suggested_fix,
                             ai_prompt=(
-                                f"'{rel}' accesses a privileged socket "
-                                f"matching '{pattern}'. This requires "
+                                f"'{rel}' line {lineno} accesses the privileged "
+                                f"socket '{matched_path}'. This requires "
                                 "explicit Snap Store approval via the "
                                 "'system-files' interface. Consider whether "
                                 "direct socket access is necessary, or if "

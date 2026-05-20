@@ -18,6 +18,7 @@
 
 import json
 
+import pydantic
 import pytest
 
 from snapcraft.analyze.models import (
@@ -117,7 +118,7 @@ class TestAIActionItem:
         assert item.file is None
 
     def test_extra_fields_forbidden(self):
-        with pytest.raises(Exception):
+        with pytest.raises(pydantic.ValidationError):
             AIActionItem(
                 category="x",
                 severity=Severity.INFO,

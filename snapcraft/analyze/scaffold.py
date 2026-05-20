@@ -51,6 +51,24 @@ from snapcraft.analyze.models import (
 )
 
 
+def _sanitise_snap_name(raw: str) -> str:
+    """Sanitise *raw* to comply with snap naming rules.
+
+    Snap names must be lowercase, consist only of ASCII alphanumeric
+    characters and hyphens, and must not start or end with a hyphen.
+    Underscores and other word-separator characters are replaced with
+    hyphens; all other non-conforming characters are dropped.
+    """
+    name = raw.lower()
+    # Replace underscores and dots (common in Python/Node package names) with hyphens.
+    name = re.sub(r"[_.]", "-", name)
+    # Strip any remaining non-conforming characters.
+    name = re.sub(r"[^a-z0-9-]", "", name)
+    # Collapse multiple consecutive hyphens.
+    name = re.sub(r"-{2,}", "-", name)
+    return name.strip("-")
+
+
 def generate_scaffold(report: AnalysisReport) -> tuple[ScaffoldResult, list[AIActionItem]]:
     """Generate a ``snapcraft.yaml`` scaffold from *report*.
 
@@ -116,13 +134,14 @@ class _ScaffoldGenerator:
         if self._report.build_systems:
             bs = self._report.build_systems[0]
             if bs.entry_points:
-                # "bin/myapp" → "myapp"
-                return bs.entry_points[0].split("/")[-1]
+                # "bin/myapp" → "myapp" → sanitise to snap naming rules.
+                raw = bs.entry_points[0].split("/")[-1]
+                return _sanitise_snap_name(raw)
         if self._report.daemons:
-            return self._report.daemons[0].name
+            return _sanitise_snap_name(self._report.daemons[0].name)
         # Fall back to directory name, sanitised for snap naming rules.
         path_name = Path(self._report.path).name
-        sanitised = re.sub(r"[^a-z0-9-]", "-", path_name.lower()).strip("-")
+        sanitised = _sanitise_snap_name(path_name)
         if not sanitised:
             self._note_gap(
                 "snap-name",
@@ -138,9 +157,14 @@ class _ScaffoldGenerator:
         return sanitised
 
     def _derive_version(self) -> str:
+        # Only use BuildSystemInfo.version as snap version when it represents
+        # the *project release version* (Python). For compiled languages Go,
+        # Rust, Node, etc. the version field carries a toolchain / edition
+        # requirement, not a releasable package version — default to "git".
+        _release_version_plugins = {"python", "poetry", "uv", "maven", "gradle"}
         if self._report.build_systems:
             bs = self._report.build_systems[0]
-            if bs.version:
+            if bs.version and bs.plugin in _release_version_plugins:
                 return bs.version
         return "git"
 
@@ -239,7 +263,8 @@ class _ScaffoldGenerator:
 
             # Plugin-specific hints.
             if bs.plugin == "go":
-                part["build-snaps"] = ["go/1.22/stable"]
+                go_channel = f"go/{bs.version}/stable" if bs.version else "go/latest/stable"
+                part["build-snaps"] = [go_channel]
             elif bs.plugin == "npm" and bs.version:
                 part["npm-node-version"] = bs.version
             elif bs.plugin in ("poetry", "uv"):

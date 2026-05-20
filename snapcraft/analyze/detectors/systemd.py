@@ -67,9 +67,6 @@ _RESTART_MAP: dict[str, str] = {
     "no": "never",
 }
 
-# Directories that should trigger a network-related plug hint.
-_NETWORK_BINARY_PREFIXES = ("/usr/bin/curl", "/usr/bin/wget", "/usr/bin/ssh")
-
 
 @registry.register
 class SystemdDetector(BaseDetector):

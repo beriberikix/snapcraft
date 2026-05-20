@@ -16,7 +16,6 @@
 
 """Unit tests for :mod:`snapcraft.analyze.confinement`."""
 
-import pytest
 
 from snapcraft.analyze.confinement import build_confinement_warnings
 

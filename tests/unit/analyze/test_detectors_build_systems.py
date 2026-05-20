@@ -17,9 +17,6 @@
 """Tests for build-system detectors."""
 
 import json
-from pathlib import Path
-
-import pytest
 
 from snapcraft.analyze.detectors.build_systems import (
     AutotoolsDetector,
@@ -34,8 +31,7 @@ from snapcraft.analyze.detectors.build_systems import (
     PythonDetector,
     RustDetector,
 )
-from snapcraft.analyze.models import FindingCategory, Severity
-
+from snapcraft.analyze.models import FindingCategory
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -376,7 +372,7 @@ class TestDotNetDetector:
 
     def test_csproj_detected(self, tmp_path):
         (tmp_path / "MyApp.csproj").write_text(
-            "<Project Sdk=\"Microsoft.NET.Sdk\">\n"
+            '<Project Sdk="Microsoft.NET.Sdk">\n'
             "  <PropertyGroup>\n"
             "    <AssemblyName>MyApp</AssemblyName>\n"
             "  </PropertyGroup>\n"
@@ -389,7 +385,7 @@ class TestDotNetDetector:
 
     def test_csproj_fallback_to_stem(self, tmp_path):
         (tmp_path / "WebApp.csproj").write_text(
-            "<Project Sdk=\"Microsoft.NET.Sdk.Web\" />\n"
+            '<Project Sdk="Microsoft.NET.Sdk.Web" />\n'
         )
         findings = DotNetDetector(tmp_path).detect()
         assert findings[0].metadata["entry_points"] == ["bin/WebApp"]

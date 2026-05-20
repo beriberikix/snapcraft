@@ -155,7 +155,9 @@ class PythonDetector(BaseDetector):
         data = _parse_toml(path)
         text = self._read_text(path)
 
-        plugin, name_suffix = self._detect_plugin(data, text)
+        # Check for a sibling uv.lock file on disk before inspecting content.
+        has_uv_lock = (path.parent / "uv.lock").exists()
+        plugin, name_suffix = self._detect_plugin(data, text, has_uv_lock=has_uv_lock)
         version = self._detect_version(data)
         entry_points = self._detect_entry_points(data)
 
@@ -169,7 +171,12 @@ class PythonDetector(BaseDetector):
         return [_finding(info)]
 
     @staticmethod
-    def _detect_plugin(data: dict, text: str) -> tuple[str, str]:  # type: ignore[type-arg]
+    def _detect_plugin(
+        data: dict,  # type: ignore[type-arg]
+        text: str,
+        *,
+        has_uv_lock: bool = False,
+    ) -> tuple[str, str]:
         if data:
             build_backend = (
                 data.get("build-system", {}).get("build-backend", "") or ""
@@ -178,8 +185,8 @@ class PythonDetector(BaseDetector):
                 return "poetry", "Poetry"
             if "hatchling" in build_backend:
                 return "python", "pip"
-        # Check for uv by looking for uv.lock or [tool.uv]
-        if "[tool.uv]" in text or "uv.lock" in text:
+        # Check for uv: sibling uv.lock on disk OR [tool.uv] section in pyproject.toml.
+        if has_uv_lock or "[tool.uv]" in text:
             return "uv", "uv"
         if "poetry" in text.lower() and "[tool.poetry]" in text:
             return "poetry", "Poetry"

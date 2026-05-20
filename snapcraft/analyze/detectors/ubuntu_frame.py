@@ -25,8 +25,8 @@ Detection is performed at two depths:
   (CMakeLists.txt, pyproject.toml, package.json, pubspec.yaml, etc.).
 
 * **Deep** (``--deep`` flag): additionally scans C/C++ source and header
-  files for Wayland/EGL includes, and searches Python/JS source for
-  Wayland/Mir client library imports.
+  files for Wayland/EGL includes, and searches C/C++ and Python sources for
+  Wayland/EGL/X11 client API calls.
 
 When this detector fires it emits findings that tell the scaffold generator
 to apply the Ubuntu Frame template pattern:
@@ -308,7 +308,7 @@ class UbuntuFrameDetector(BaseDetector):
         return None
 
     def _scan_source_deep(self) -> list[DetectorFinding]:
-        """Deep scan: search C/C++ and Python sources for Wayland/X11 usage."""
+        """Deep scan: search C/C++ and Python sources for Wayland/EGL/X11 usage."""
         findings: list[DetectorFinding] = []
 
         source_extensions = [
@@ -338,6 +338,31 @@ class UbuntuFrameDetector(BaseDetector):
                                     "toolkit_name": "Native Wayland",
                                     "display_backend": "wayland",
                                     "stage_packages": [],
+                                    "env_vars": {},
+                                },
+                            )
+                        )
+                        return findings  # One hit is enough.
+
+                for pattern in _DEEP_X11_PATTERNS:
+                    matches = self._grep(src_file, pattern)
+                    if matches:
+                        lineno, _ = matches[0]
+                        rel = str(src_file.relative_to(self._path))
+                        findings.append(
+                            DetectorFinding(
+                                category=FindingCategory.GUI,
+                                severity=Severity.INFO,
+                                description=(
+                                    f"X11/Mir usage found in '{rel}' "
+                                    f"(pattern: {pattern!r})."
+                                ),
+                                file=rel,
+                                line=lineno,
+                                metadata={
+                                    "toolkit_name": "X11/Mir",
+                                    "display_backend": "x11",
+                                    "stage_packages": ["libx11-6"],
                                     "env_vars": {},
                                 },
                             )

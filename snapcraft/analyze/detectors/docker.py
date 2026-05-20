@@ -122,7 +122,14 @@ class DockerDetector(BaseDetector):
                             ),
                             file=str(path.relative_to(self._path)),
                             line=lineno,
-                            metadata={"plugin_hint": plugin, "from_image": image},
+                            # Emit a BuildSystemInfo-compatible payload so
+                            # AnalyzeService._collect_build_systems can surface
+                            # it in report.build_systems.
+                            metadata={
+                                "name": f"Dockerfile ({image})",
+                                "plugin": plugin,
+                                "confidence": 0.7,
+                            },
                         )
                     )
                     break
@@ -179,7 +186,15 @@ class DockerDetector(BaseDetector):
                         ),
                         file=str(path.relative_to(self._path)),
                         line=lineno,
-                        metadata={"command_hint": command},
+                        # Include the minimal DaemonInfo fields so
+                        # AnalyzeService._collect_daemons can surface this
+                        # as an inferred entry point in report.daemons.
+                        metadata={
+                            "name": "app",
+                            "daemon_type": "simple",
+                            "command": f"bin/{command.split()[0]}",
+                            "source_file": str(path.relative_to(self._path)),
+                        },
                     )
                 )
         return findings

@@ -16,7 +16,6 @@
 
 """Tests for the detector registry."""
 
-from pathlib import Path
 
 import pytest
 
@@ -154,7 +153,7 @@ class TestBaseDetectorHelpers:
 
     def test_grep(self, tmp_path):
         src = tmp_path / "main.c"
-        src.write_text("int main() {\n    printf(\"hello\");\n    return 0;\n}\n")
+        src.write_text('int main() {\n    printf("hello");\n    return 0;\n}\n')
         det = _AlwaysFiringDetector(tmp_path)
         matches = det._grep(src, r"printf")
         assert len(matches) == 1
