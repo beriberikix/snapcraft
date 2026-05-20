@@ -1,5 +1,5 @@
 .. meta::
-    :description: How to use snapcraft analyze to inspect a repository for snap packaging readiness, interpret the output, and generate a best-effort snapcraft.yaml scaffold.
+    :description: How to use snapcraft analyze to inspect a repository for snap packaging readiness, interpret the output, and generate a best-effort snapcraft.yaml scaffold or an AI coding agent prompt.
 
 .. _how-to-analyze:
 
@@ -83,6 +83,33 @@ agents:
 
 The JSON schema mirrors the Pydantic models defined in
 ``snapcraft/analyze/models.py``.
+
+
+Generate an AI coding agent prompt
+------------------------------------
+
+Pass ``--format prompt`` to emit a self-contained Markdown prompt on standard
+output.  The prompt is agent-agnostic and can be pasted into any AI coding
+agent (Claude, Copilot, Cursor, etc.).  It instructs the agent to:
+
+1. Install the ``snapcraft-packaging`` skill for domain-specific knowledge.
+2. Review the key analysis findings (project type, build system, daemons,
+   required interfaces, and confinement issues).
+3. Develop the draft ``snapcraft.yaml`` scaffold (embedded in the prompt,
+   clearly marked as a starting point requiring further work).
+4. Build, install, and smoke-test the snap.
+5. Tighten confinement from ``devmode`` to ``strict``.
+6. Publish to the Snap Store.
+
+.. code-block:: bash
+
+    snapcraft analyze . --format prompt
+
+    # Save to a file and open in an editor before pasting:
+    snapcraft analyze . --format prompt > snap-packaging-prompt.md
+
+The prompt is regenerated from scratch each time; re-run after making
+significant changes to the project to get an updated plan.
 
 
 Enable deep source scanning

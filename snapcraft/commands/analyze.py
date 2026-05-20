@@ -29,6 +29,9 @@ Output formats:
   * ``json``            — full :class:`AnalysisReport` as JSON on stdout;
                           suitable for piping to ``jq`` or a downstream
                           AI migration agent.
+  * ``prompt``          — a self-contained Markdown prompt for any AI coding
+                          agent covering the full packaging workflow from
+                          build through to publication.
 """
 
 from __future__ import annotations
@@ -77,6 +80,7 @@ class AnalyzeCommand(AppCommand):
             snapcraft analyze .
             snapcraft analyze /path/to/repo
             snapcraft analyze . --format json | jq .ai_actions
+            snapcraft analyze . --format prompt
             snapcraft analyze . --deep
         """
     )
@@ -102,6 +106,8 @@ class AnalyzeCommand(AppCommand):
                 "Output format. "
                 f"Choices: {', '.join(sorted(OUTPUT_FORMATS))}. "
                 "Use 'json' for machine-readable output suitable for AI agents. "
+                "Use 'prompt' to generate an AI coding agent prompt for the "
+                "full snap packaging workflow. "
                 "(default: table)"
             ),
         )

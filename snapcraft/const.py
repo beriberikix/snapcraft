@@ -97,6 +97,7 @@ class OutputFormat(str, enum.Enum):
     """Output formats for snapcraft commands."""
 
     json = "json"
+    prompt = "prompt"
     table = "table"
 
     def __str__(self) -> str:

@@ -16,7 +16,7 @@
 
 """Output formatters for ``snapcraft analyze``.
 
-Two formats are supported:
+Three formats are supported:
 
 ``table`` (human-readable, default)
     Sections printed to the terminal via ``craft_cli.emit``.
@@ -24,6 +24,10 @@ Two formats are supported:
 ``json``
     Full :class:`~snapcraft.analyze.models.AnalysisReport` serialised as
     indented JSON, emitted as a single ``emit.message()`` call.
+
+``prompt``
+    A self-contained Markdown prompt for any AI coding agent, covering the
+    full snap-packaging workflow from build through to publication.
 """
 
 from __future__ import annotations
@@ -33,6 +37,7 @@ from typing import TYPE_CHECKING
 
 from craft_cli import emit
 
+from snapcraft.analyze.prompt import generate_prompt
 from snapcraft.const import OutputFormat
 
 if TYPE_CHECKING:
@@ -50,6 +55,8 @@ def format_report(report: AnalysisReport, fmt: OutputFormat) -> None:
     """
     if fmt == OutputFormat.json:
         _emit_json(report)
+    elif fmt == OutputFormat.prompt:
+        _emit_prompt(report)
     else:
         _emit_table(report)
 
@@ -61,6 +68,15 @@ def format_report(report: AnalysisReport, fmt: OutputFormat) -> None:
 
 def _emit_json(report: AnalysisReport) -> None:
     emit.message(json.dumps(report.model_dump(), indent=2, default=str))
+
+
+# ---------------------------------------------------------------------------
+# Prompt formatter
+# ---------------------------------------------------------------------------
+
+
+def _emit_prompt(report: AnalysisReport) -> None:
+    emit.message(generate_prompt(report))
 
 
 # ---------------------------------------------------------------------------
