@@ -48,7 +48,7 @@ from snapcraft.analyze.models import (
 # Paths that are clearly problematic inside a strict snap.
 _HARDCODED_PATH_RE = re.compile(
     r"""
-    (?<!["\w/])              # not part of a longer word / string literal
+    (?<![\w/])               # not in the middle of a longer path segment or word
     (
       /etc/(?!hosts\b|resolv\.conf\b|timezone\b|localtime\b|passwd\b|group\b|os-release\b)
     | /var/(?:lib|run|log|cache|spool)/
@@ -76,9 +76,12 @@ _SKIP_DIRS = frozenset(
 )
 
 # Privileged sockets that a snap should never directly access.
+# Note: /var/run is a symlink to /run on modern systems, so both paths exist.
+# The pattern for bare /run/docker.sock uses a negative lookbehind to avoid
+# double-matching when /var/run/docker.sock is already present in the same text.
 _PRIVILEGED_SOCKETS = [
     r"/var/run/docker\.sock",
-    r"/run/docker\.sock",
+    r"(?<!/var)/run/docker\.sock",
     r"/run/containerd\.sock",
     r"/var/run/libvirt",
 ]

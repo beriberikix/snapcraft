@@ -183,10 +183,15 @@ class PythonDetector(BaseDetector):
 
     @staticmethod
     def _detect_version(data: dict) -> str | None:  # type: ignore[type-arg]
+        """Return the project's release *version*, not the Python interpreter requirement.
+
+        ``requires-python`` is a Python version floor constraint, not a package
+        version — it must not be used as the snap ``version`` field.
+        """
         if data:
             return (
-                data.get("project", {}).get("requires-python")
-                or data.get("tool", {}).get("poetry", {}).get("dependencies", {}).get("python")
+                data.get("project", {}).get("version")
+                or data.get("tool", {}).get("poetry", {}).get("version")
             )
         return None
 

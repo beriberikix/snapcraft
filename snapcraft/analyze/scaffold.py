@@ -324,22 +324,22 @@ class _ScaffoldGenerator:
                 common_env.update(finding.metadata["env_vars"])
 
         app_entry: dict[str, Any] = {
-            "command-chain": common_command_chain,
+            "command-chain": list(common_command_chain),
             "command": command,
-            "plugs": common_plugs,
+            "plugs": list(common_plugs),
         }
         daemon_entry: dict[str, Any] = {
             "daemon": "simple",
             "restart-delay": "3s",
             "restart-condition": "always",
-            "command-chain": common_command_chain,
+            "command-chain": list(common_command_chain),
             "command": command,
-            "plugs": common_plugs,
+            "plugs": list(common_plugs),
         }
 
         if common_env:
-            app_entry["environment"] = common_env
-            daemon_entry["environment"] = common_env
+            app_entry["environment"] = dict(common_env)
+            daemon_entry["environment"] = dict(common_env)
 
         doc["apps"] = {
             snap_name: app_entry,

@@ -211,6 +211,19 @@ class TestScaffoldUbuntuFrame:
             assert "bin/gpu-2404-wrapper" in app.get("command-chain", [])
             assert "bin/wayland-launch" in app.get("command-chain", [])
 
+    def test_no_yaml_anchors_in_output(self, tmp_path):
+        """command-chain/plugs/environment lists must be independent copies.
+
+        When the same Python list or dict object is shared between app entries
+        PyYAML emits ``&id001`` / ``*id001`` anchors.  The raw YAML text must
+        not contain any anchors so that the scaffold is directly copy-pasteable.
+        """
+        result, _ = generate_scaffold(_frame_report(tmp_path))
+        assert "&id" not in result.yaml_content, (
+            "YAML anchors (&id…) found in scaffold — "
+            "app entries must use independent list/dict copies."
+        )
+
 
 class TestScaffoldConfidence:
     def test_full_project_has_high_confidence(self, tmp_path):

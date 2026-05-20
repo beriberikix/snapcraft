@@ -132,6 +132,44 @@ class TestPythonDetector:
         # Only one result from pyproject
         assert len(findings) == 1
 
+    def test_version_uses_project_version_not_requires_python(self, tmp_path):
+        """version field must reflect the package version, not requires-python."""
+        (tmp_path / "pyproject.toml").write_text(
+            "[build-system]\n"
+            'requires = ["hatchling"]\n'
+            'build-backend = "hatchling.build"\n'
+            "[project]\n"
+            'name = "iot-monitor"\n'
+            'version = "1.0.0"\n'
+            'requires-python = ">=3.11"\n'
+            "[project.scripts]\n"
+            'iot-monitor = "iot_monitor.main:run"\n'
+        )
+        findings = PythonDetector(tmp_path).detect()
+        assert findings[0].metadata["version"] == "1.0.0"
+
+    def test_requires_python_not_used_as_version(self, tmp_path):
+        """requires-python constraint must never appear in the version field."""
+        (tmp_path / "pyproject.toml").write_text(
+            "[project]\n"
+            'requires-python = ">=3.10"\n'
+        )
+        findings = PythonDetector(tmp_path).detect()
+        version = findings[0].metadata.get("version")
+        assert version != ">=3.10", "requires-python must not be used as snap version"
+
+    def test_poetry_version_extracted(self, tmp_path):
+        (tmp_path / "pyproject.toml").write_text(
+            "[build-system]\n"
+            'requires = ["poetry-core"]\n'
+            'build-backend = "poetry.core.masonry.api"\n'
+            "[tool.poetry]\n"
+            'name = "myservice"\n'
+            'version = "2.3.1"\n'
+        )
+        findings = PythonDetector(tmp_path).detect()
+        assert findings[0].metadata["version"] == "2.3.1"
+
 
 # ---------------------------------------------------------------------------
 # Rust
