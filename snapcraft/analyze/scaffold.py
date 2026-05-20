@@ -136,6 +136,9 @@ class _ScaffoldGenerator:
         doc["description"] = "TODO: describe what this snap does.\n"
         doc["license"] = "TODO: SPDX expression (e.g. Apache-2.0, MIT, GPL-3.0)"
         doc["contact"] = "TODO: contact URL or email for this snap"
+        doc["website"] = f"TODO: project homepage URL for {snap_name}"
+        doc["source-code"] = f"TODO: source repository URL for {snap_name}"
+        doc["issues"] = f"TODO: bug tracker URL for {snap_name}"
         doc["grade"] = "devel"
 
         for key, description, ai_prompt in (
@@ -160,6 +163,25 @@ class _ScaffoldGenerator:
                 "Set the contact field to a URL or email address where "
                 "users can reach the snap publisher. "
                 "Replace the TODO value for `contact:` in snapcraft.yaml.",
+            ),
+            (
+                "website",
+                f"Project homepage URL for '{snap_name}' not set.",
+                "Set the website field to the project's homepage URL. "
+                "Replace the TODO value for `website:` in snapcraft.yaml.",
+            ),
+            (
+                "source-code",
+                f"Source repository URL for '{snap_name}' not set.",
+                "Set the source-code field to the project's source repository "
+                "URL (e.g. https://github.com/owner/repo). "
+                "Replace the TODO value for `source-code:` in snapcraft.yaml.",
+            ),
+            (
+                "issues",
+                f"Bug tracker URL for '{snap_name}' not set.",
+                "Set the issues field to the project's bug tracker URL. "
+                "Replace the TODO value for `issues:` in snapcraft.yaml.",
             ),
         ):
             self._note_gap(
@@ -259,12 +281,13 @@ class _ScaffoldGenerator:
                     )
                 entry["daemon"] = daemon.daemon_type
                 entry["restart-condition"] = daemon.restart_condition
-                if daemon.plugs or self._report.plugs:
-                    plug_names = list(daemon.plugs) + [
-                        p.name for p in self._report.plugs
-                        if p.name not in daemon.plugs
-                    ]
-                    entry["plugs"] = plug_names
+                # Always emit plugs: — even empty, it signals to the reader
+                # that interface configuration is required.
+                plug_names = list(daemon.plugs) + [
+                    p.name for p in self._report.plugs
+                    if p.name not in daemon.plugs
+                ]
+                entry["plugs"] = plug_names
                 apps[daemon.name] = entry
         elif self._report.build_systems:
             bs = self._report.build_systems[0]
@@ -283,8 +306,9 @@ class _ScaffoldGenerator:
                         "correct relative path inside the snap."
                     ),
                 )
-            if self._report.plugs:
-                entry["plugs"] = [p.name for p in self._report.plugs]
+            # Always emit plugs: — even empty, it signals that interface
+            # configuration is required for strict confinement.
+            entry["plugs"] = [p.name for p in self._report.plugs]
             apps[snap_name] = entry
         else:
             apps[snap_name] = {
@@ -412,7 +436,7 @@ class _ScaffoldGenerator:
         daemon_entry: dict[str, Any] = {
             "daemon": "simple",
             "restart-delay": "3s",
-            "restart-condition": "always",
+            "restart-condition": "on-failure",
             "command-chain": list(common_command_chain),
             "command": command,
             "plugs": list(common_plugs),

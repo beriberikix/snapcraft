@@ -343,3 +343,116 @@ class TestVersionGitNoRepo:
         _, ai_actions = generate_scaffold(_go_report(tmp_path))
         categories = {a.category for a in ai_actions}
         assert "scaffold-gap:version-git-no-repo" in categories
+
+
+class TestScaffoldWebsiteSourceIssues:
+    """website, source-code, and issues are always emitted as TODO fields."""
+
+    def test_website_in_scaffold(self, tmp_path):
+        result, _ = generate_scaffold(_go_report(tmp_path))
+        doc = yaml.safe_load(result.yaml_content)
+        assert "website" in doc
+        assert "TODO" in doc["website"]
+
+    def test_source_code_in_scaffold(self, tmp_path):
+        result, _ = generate_scaffold(_go_report(tmp_path))
+        doc = yaml.safe_load(result.yaml_content)
+        assert "source-code" in doc
+        assert "TODO" in doc["source-code"]
+
+    def test_issues_in_scaffold(self, tmp_path):
+        result, _ = generate_scaffold(_go_report(tmp_path))
+        doc = yaml.safe_load(result.yaml_content)
+        assert "issues" in doc
+        assert "TODO" in doc["issues"]
+
+    def test_url_gaps_recorded(self, tmp_path):
+        result, _ = generate_scaffold(_go_report(tmp_path))
+        gap_text = " ".join(result.gaps)
+        # "website" gap is described as "Project homepage URL"
+        assert "website" in gap_text.lower() or "homepage" in gap_text.lower()
+        assert "source" in gap_text.lower()
+        assert "issues" in gap_text.lower() or "bug" in gap_text.lower()
+
+    def test_url_gaps_do_not_reduce_confidence(self, tmp_path):
+        """website/source-code/issues gaps must not penalise confidence."""
+        result, _ = generate_scaffold(_daemon_report(tmp_path))
+        assert result.confidence >= 0.8
+
+    def test_url_ai_actions_present(self, tmp_path):
+        _, ai_actions = generate_scaffold(_go_report(tmp_path))
+        categories = {a.category for a in ai_actions}
+        assert "scaffold-gap:metadata-website" in categories
+        assert "scaffold-gap:metadata-source-code" in categories
+        assert "scaffold-gap:metadata-issues" in categories
+
+
+class TestScaffoldAlwaysEmitsPlugs:
+    """Every app/daemon entry must always have a plugs: key, even if empty."""
+
+    def test_daemon_entry_always_has_plugs(self, tmp_path):
+        """Daemon with no detected plugs still gets plugs: []."""
+        report = AnalysisReport(
+            path=str(tmp_path),
+            daemons=[DaemonInfo(name="myservice", daemon_type="simple", command="bin/svc")],
+        )
+        result, _ = generate_scaffold(report)
+        doc = yaml.safe_load(result.yaml_content)
+        assert "plugs" in doc["apps"]["myservice"]
+
+    def test_generic_app_always_has_plugs(self, tmp_path):
+        """Generic app with no detected plugs still gets plugs: []."""
+        report = AnalysisReport(
+            path=str(tmp_path),
+            build_systems=[BuildSystemInfo(
+                name="Go", plugin="go", entry_points=["bin/myapp"]
+            )],
+        )
+        result, _ = generate_scaffold(report)
+        doc = yaml.safe_load(result.yaml_content)
+        assert "plugs" in doc["apps"][list(doc["apps"])[0]]
+
+    def test_daemon_plugs_populated_from_report(self, tmp_path):
+        """Daemon plugs are merged from daemon.plugs + report.plugs."""
+        report = AnalysisReport(
+            path=str(tmp_path),
+            daemons=[DaemonInfo(
+                name="svc", daemon_type="simple", command="bin/svc",
+                plugs=["network"],
+            )],
+            plugs=[PlugInfo(name="network-bind", reason="listens")],
+        )
+        result, _ = generate_scaffold(report)
+        doc = yaml.safe_load(result.yaml_content)
+        plugs = doc["apps"]["svc"]["plugs"]
+        assert "network" in plugs
+        assert "network-bind" in plugs
+
+
+class TestFrameDaemonRestartCondition:
+    """Ubuntu Frame daemon scaffold uses on-failure, not always."""
+
+    def test_frame_daemon_uses_on_failure(self, tmp_path):
+        report = AnalysisReport(
+            path=str(tmp_path),
+            build_systems=[BuildSystemInfo(
+                name="Qt/CMake", plugin="cmake", entry_points=["bin/kiosk"]
+            )],
+            is_ubuntu_frame_app=True,
+        )
+        result, _ = generate_scaffold(report)
+        doc = yaml.safe_load(result.yaml_content)
+        daemon_entry = doc["apps"]["daemon"]
+        assert daemon_entry["restart-condition"] == "on-failure"
+
+    def test_frame_daemon_not_always(self, tmp_path):
+        """The old restart-condition: always must not appear in Frame scaffolds."""
+        report = AnalysisReport(
+            path=str(tmp_path),
+            build_systems=[BuildSystemInfo(
+                name="Qt/CMake", plugin="cmake", entry_points=["bin/kiosk"]
+            )],
+            is_ubuntu_frame_app=True,
+        )
+        result, _ = generate_scaffold(report)
+        assert "restart-condition: always" not in result.yaml_content

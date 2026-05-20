@@ -293,8 +293,12 @@ class TestUbuntuFrameSection:
         assert "ubuntu-frame" in prompt.lower() or "Ubuntu Frame" in prompt
 
     def test_ubuntu_frame_no_journalctl(self, tmp_path):
+        # Step 7 now always includes 'journalctl -k | grep DENIED' as an
+        # alternative to snappy-debug.  The Frame-specific check is that the
+        # daemon service log line ('journalctl -u snap.…') does NOT appear,
+        # since Frame apps are not headless daemons.
         prompt = generate_prompt(_ubuntu_frame_report(tmp_path))
-        assert "journalctl" not in prompt
+        assert "journalctl -u" not in prompt
 
     def test_non_frame_has_no_frame_snap_install(self, tmp_path):
         prompt = generate_prompt(_go_daemon_report(tmp_path))
@@ -479,7 +483,8 @@ class TestPreflightSection:
         )
         prompt = generate_prompt(report)
         assert "/tmp" in prompt
-        assert "Multipass cannot mount" in prompt or "outside" in prompt.lower()
+        # New text: "cannot access /tmp paths" — no longer macOS-specific
+        assert "cannot access" in prompt or "build providers" in prompt.lower()
 
     def test_tmp_path_warning_absent_for_home_project(self, tmp_path):
         # Use a path that does NOT start with /tmp
@@ -543,3 +548,173 @@ class TestStepNumbering:
         prompt = generate_prompt(_go_daemon_report(tmp_path))
         # There should be no "Step 4 — Build" heading
         assert "Step 4 — Build" not in prompt
+
+
+# ---------------------------------------------------------------------------
+# CRAFT_MANAGED_MODE warning (always present in Step 4)
+# ---------------------------------------------------------------------------
+
+
+class TestCraftManagedModeWarning:
+    def test_craft_managed_mode_warning_always_present(self, tmp_path):
+        """The CRAFT_MANAGED_MODE nested-VM warning is in every prompt."""
+        prompt = generate_prompt(_go_daemon_report(tmp_path))
+        assert "CRAFT_MANAGED_MODE" in prompt
+
+    def test_craft_managed_mode_warning_in_frame_prompt(self, tmp_path):
+        prompt = generate_prompt(_ubuntu_frame_report(tmp_path))
+        assert "CRAFT_MANAGED_MODE" in prompt
+
+    def test_craft_managed_mode_unset_instruction(self, tmp_path):
+        prompt = generate_prompt(_go_daemon_report(tmp_path))
+        assert "unset CRAFT_MANAGED_MODE" in prompt
+
+    def test_snapcraft_build_environment_host_instruction(self, tmp_path):
+        prompt = generate_prompt(_go_daemon_report(tmp_path))
+        assert "SNAPCRAFT_BUILD_ENVIRONMENT=host" in prompt
+
+
+# ---------------------------------------------------------------------------
+# snappy-debug install step (always present in Step 7)
+# ---------------------------------------------------------------------------
+
+
+class TestSnappyDebugInstallStep:
+    def test_snappy_debug_install_command_present(self, tmp_path):
+        prompt = generate_prompt(_go_daemon_report(tmp_path))
+        assert "snap install snappy-debug" in prompt
+
+    def test_journalctl_kernel_audit_alternative_present(self, tmp_path):
+        """journalctl -k | grep DENIED is listed as an alternative."""
+        prompt = generate_prompt(_go_daemon_report(tmp_path))
+        assert "journalctl -k" in prompt
+
+    def test_snappy_debug_in_frame_prompt(self, tmp_path):
+        prompt = generate_prompt(_ubuntu_frame_report(tmp_path))
+        assert "snap install snappy-debug" in prompt
+
+
+# ---------------------------------------------------------------------------
+# Docker interface note (conditional on has_docker_plug)
+# ---------------------------------------------------------------------------
+
+
+class TestDockerPlugNote:
+    def _docker_report(self, tmp_path):
+        return AnalysisReport(
+            path=str(tmp_path),
+            build_systems=[BuildSystemInfo(name="Python/pip", plugin="python")],
+            daemons=[DaemonInfo(
+                name="iot-monitor", daemon_type="simple", command="bin/iot-monitor",
+                plugs=["network", "docker"],
+            )],
+            plugs=[
+                PlugInfo(name="network", reason="opens outbound connections"),
+                PlugInfo(name="docker", reason="accesses /var/run/docker.sock"),
+            ],
+            scaffold=ScaffoldResult(
+                yaml_content="name: iot-monitor\nbase: core24\nversion: 1.0.0\n",
+                confidence=0.9,
+            ),
+        )
+
+    def test_docker_note_shown_when_docker_plug_present(self, tmp_path):
+        prompt = generate_prompt(self._docker_report(tmp_path))
+        assert "docker snap" in prompt.lower() or "docker" in prompt
+
+    def test_docker_note_mentions_apt_docker(self, tmp_path):
+        prompt = generate_prompt(self._docker_report(tmp_path))
+        assert "apt" in prompt
+
+    def test_docker_note_absent_when_no_docker_plug(self, tmp_path):
+        prompt = generate_prompt(_python_app_report(tmp_path))
+        assert "docker snap" not in prompt.lower() or "docker" not in prompt
+
+
+# ---------------------------------------------------------------------------
+# Non-TTY publish path (always present in Step 8)
+# ---------------------------------------------------------------------------
+
+
+class TestNonTTYPublishPath:
+    def test_export_login_command_present(self, tmp_path):
+        """snapcraft export-login is always documented in Step 8."""
+        prompt = generate_prompt(_go_daemon_report(tmp_path))
+        assert "export-login" in prompt
+
+    def test_snapcraft_store_credentials_var_present(self, tmp_path):
+        prompt = generate_prompt(_go_daemon_report(tmp_path))
+        assert "SNAPCRAFT_STORE_CREDENTIALS" in prompt
+
+    def test_export_login_in_frame_prompt(self, tmp_path):
+        prompt = generate_prompt(_ubuntu_frame_report(tmp_path))
+        assert "export-login" in prompt
+
+
+# ---------------------------------------------------------------------------
+# restart-condition: always note (conditional)
+# ---------------------------------------------------------------------------
+
+
+class TestRestartAlwaysNote:
+    def _always_restart_report(self, tmp_path):
+        return AnalysisReport(
+            path=str(tmp_path),
+            daemons=[DaemonInfo(
+                name="myservice", daemon_type="simple", command="bin/svc",
+                restart_condition="always",
+            )],
+            scaffold=ScaffoldResult(
+                yaml_content=(
+                    "name: myservice\nbase: core24\nversion: git\n"
+                    "apps:\n  myservice:\n    daemon: simple\n"
+                    "    restart-condition: always\n"
+                ),
+                confidence=0.9,
+            ),
+        )
+
+    def test_restart_always_note_shown(self, tmp_path):
+        prompt = generate_prompt(self._always_restart_report(tmp_path))
+        assert "restart-condition: always" in prompt
+        assert "on-failure" in prompt
+
+    def test_restart_always_note_absent_for_on_failure(self, tmp_path):
+        prompt = generate_prompt(_go_daemon_report(tmp_path))
+        # _go_daemon_report uses restart_condition="on-failure"
+        # The note should not appear
+        assert "restart-condition: always" not in prompt or "on-failure" in prompt
+
+
+# ---------------------------------------------------------------------------
+# /tmp restriction text is Linux-wide (not macOS-specific)
+# ---------------------------------------------------------------------------
+
+
+class TestTmpRestrictionText:
+    def test_tmp_warning_mentions_build_providers(self, tmp_path):
+        """New text says 'build providers', not 'macOS'."""
+        report = AnalysisReport(
+            path="/tmp/my-project",
+            build_systems=[BuildSystemInfo(name="Go", plugin="go")],
+            scaffold=ScaffoldResult(
+                yaml_content="name: my-project\nbase: core24\nversion: git\n",
+                confidence=0.9,
+            ),
+        )
+        prompt = generate_prompt(report)
+        # The new text is Linux-wide and mentions build providers
+        assert "build providers" in prompt.lower() or "cannot access" in prompt
+
+    def test_tmp_warning_not_macos_specific(self, tmp_path):
+        report = AnalysisReport(
+            path="/tmp/my-project",
+            build_systems=[BuildSystemInfo(name="Go", plugin="go")],
+            scaffold=ScaffoldResult(
+                yaml_content="name: my-project\nbase: core24\nversion: git\n",
+                confidence=0.9,
+            ),
+        )
+        prompt = generate_prompt(report)
+        # "macOS" should not be mentioned as the reason for the restriction
+        assert "macOS" not in prompt

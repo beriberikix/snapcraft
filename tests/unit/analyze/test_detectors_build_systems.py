@@ -166,6 +166,82 @@ class TestPythonDetector:
         findings = PythonDetector(tmp_path).detect()
         assert findings[0].metadata["version"] == "2.3.1"
 
+    def test_missing_init_py_flagged(self, tmp_path):
+        """Package directory without __init__.py → CONFINEMENT WARNING."""
+        (tmp_path / "pyproject.toml").write_text(
+            "[build-system]\n"
+            'requires = ["hatchling"]\n'
+            'build-backend = "hatchling.build"\n'
+        )
+        pkg = tmp_path / "mypackage"
+        pkg.mkdir()
+        (pkg / "main.py").write_text("def run(): pass\n")
+        # No __init__.py in mypackage/
+
+        findings = PythonDetector(tmp_path).detect()
+        confinement = [
+            f for f in findings if f.category == FindingCategory.CONFINEMENT
+        ]
+        assert any(
+            f.metadata.get("violation_type") == "missing-init-py"
+            for f in confinement
+        )
+
+    def test_no_missing_init_warning_when_init_exists(self, tmp_path):
+        """Package directory WITH __init__.py → no warning."""
+        (tmp_path / "pyproject.toml").write_text(
+            "[build-system]\n"
+            'requires = ["hatchling"]\n'
+            'build-backend = "hatchling.build"\n'
+        )
+        pkg = tmp_path / "mypackage"
+        pkg.mkdir()
+        (pkg / "__init__.py").write_text("")
+        (pkg / "main.py").write_text("def run(): pass\n")
+
+        findings = PythonDetector(tmp_path).detect()
+        confinement = [
+            f for f in findings if f.category == FindingCategory.CONFINEMENT
+        ]
+        assert not any(
+            f.metadata.get("violation_type") == "missing-init-py"
+            for f in confinement
+        )
+
+    def test_missing_init_not_flagged_for_tests_dir(self, tmp_path):
+        """The 'tests/' directory is excluded from the __init__.py check."""
+        (tmp_path / "pyproject.toml").write_text(
+            "[build-system]\n"
+            'requires = ["setuptools"]\n'
+            'build-backend = "setuptools.build_meta"\n'
+        )
+        tests_dir = tmp_path / "tests"
+        tests_dir.mkdir()
+        (tests_dir / "test_main.py").write_text("def test_foo(): pass\n")
+        # No __init__.py in tests/ — but this should NOT be flagged
+
+        findings = PythonDetector(tmp_path).detect()
+        confinement = [
+            f for f in findings if f.category == FindingCategory.CONFINEMENT
+        ]
+        assert not any(
+            f.metadata.get("violation_type") == "missing-init-py"
+            and "tests" in (f.metadata.get("directory") or "")
+            for f in confinement
+        )
+
+    def test_no_false_positive_for_non_python_project(self, tmp_path):
+        """__init__.py check does not fire for non-Python projects."""
+        pkg = tmp_path / "mypackage"
+        pkg.mkdir()
+        (pkg / "main.py").write_text("def run(): pass\n")
+        # No pyproject.toml / setup.py → PythonDetector returns empty
+
+        findings = PythonDetector(tmp_path).detect()
+        assert not any(
+            f.category == FindingCategory.CONFINEMENT for f in findings
+        )
+
 
 # ---------------------------------------------------------------------------
 # Rust

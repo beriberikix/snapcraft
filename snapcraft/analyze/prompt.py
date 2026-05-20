@@ -148,6 +148,12 @@ each plugin and interface.
 - {{ gap }}
 {% endfor %}
 {% endif %}
+{% if has_always_restart %}
+> **Note on `restart-condition: always`:** This restarts the service even on
+> a clean exit (code 0). If the daemon can exit intentionally, this will hit
+> systemd's start-limit and generate restart-loop alerts. Use
+> `restart-condition: on-failure` unless the service must always restart.
+{% endif %}
 
 ```yaml
 {{ scaffold_yaml | indent(0) }}
@@ -169,9 +175,9 @@ Before running `snapcraft`, verify the following:
   `snapcraft.yaml` (e.g. `version: '1.0.0'`).
 {% endif %}
 {% if project_in_tmp %}
-- [ ] **Move project out of /tmp** — Multipass cannot mount paths outside
-  your home directory; `/tmp` paths appear not to exist inside the VM.
-  Copy the project first:
+- [ ] **Move project out of /tmp** — Snapcraft's build providers (Multipass
+  and LXD) cannot access `/tmp` paths. Copy the project to your home
+  directory first:
   ```
   cp -r {{ project_path }} ~/{{ snap_name }}
   cd ~/{{ snap_name }}
@@ -186,6 +192,16 @@ Before running `snapcraft`, verify the following:
   ```
   SNAPCRAFT_BUILD_ENVIRONMENT=multipass snapcraft
   ```
+
+  > **If you manually enter a snapcraft-provisioned VM** (via `multipass exec`
+  > or `lxc exec`): the VM's `/etc/environment` contains
+  > `SNAPCRAFT_BUILD_ENVIRONMENT=multipass` and `CRAFT_MANAGED_MODE=1`. Running
+  > `snapcraft` inside the VM without unsetting these causes it to try to
+  > spin up a nested VM. Unset them before building:
+  > ```
+  > unset CRAFT_MANAGED_MODE
+  > export SNAPCRAFT_BUILD_ENVIRONMENT=host
+  > ```
 
 ---
 
@@ -267,16 +283,34 @@ devmode, switch to strict confinement:
    sudo snap install --dangerous *.snap
    ```
    > **No TTY?** Use `pkexec snap install --dangerous *.snap`.
-4. Run `snappy-debug` in a separate terminal to capture denied syscalls and
-   interface accesses:
+4. Install `snappy-debug` and run it to capture AppArmor denials and
+   missing interfaces:
    ```
+   sudo snap install snappy-debug
    sudo snappy-debug
    ```
-5. Add any missing plugs that `snappy-debug` reports and iterate until the
+   Alternatively, the kernel audit log works without installing anything:
+   ```
+   journalctl -k | grep DENIED
+   ```
+5. Add any missing plugs that appear in the denial log and iterate until the
    snap runs cleanly under strict confinement.
 {% if confinement_warnings %}
 6. Address the confinement issues listed in Step 2 — hardcoded paths and
    root-user assumptions must be fixed for the snap to work in strict mode.
+{% endif %}
+{% if has_docker_plug %}
+
+> **Docker interface:** The `docker` plug connects to a slot provided by the
+> **docker snap** — not the apt `docker.io` / `docker-ce` package. On hosts
+> using the apt Docker package, the plug will have no slot and will not
+> auto-connect. Either install the docker snap:
+> ```
+> sudo snap install docker
+> ```
+> or replace the `docker` plug with the `system-files` interface to access
+> `/var/run/docker.sock` directly (requires Snap Store manual review approval
+> for strict confinement).
 {% endif %}
 
 ---
@@ -302,6 +336,17 @@ Once the snap passes all tests under strict confinement:
    ```
    snapcraft release {{ snap_name }} <revision> stable
    ```
+
+> **No interactive terminal (CI/CD or agent sessions)?** Export credentials
+> once on a machine with a TTY, then use the token in any environment:
+> ```
+> # One-time export (requires interactive terminal):
+> snapcraft export-login credentials.txt
+> # In CI/CD or agent sessions (no TTY required):
+> export SNAPCRAFT_STORE_CREDENTIALS=$(cat credentials.txt)
+> snapcraft register {{ snap_name }}
+> snapcraft upload --release=edge *.snap
+> ```
 
 ---
 
@@ -343,6 +388,16 @@ def generate_prompt(report: AnalysisReport) -> str:
     )
     project_in_tmp = report.path.startswith("/tmp")  # noqa: S108
 
+    # Docker plug requires the docker snap slot — warn when detected.
+    has_docker_plug = any(
+        p.name in ("docker", "docker-support") for p in report.plugs
+    )
+
+    # restart-condition: always can cause restart loops — flag for review.
+    has_always_restart = any(
+        d.restart_condition == "always" for d in report.daemons
+    )
+
     return template.render(
         snap_name=snap_name,
         project_path=report.path,
@@ -358,6 +413,8 @@ def generate_prompt(report: AnalysisReport) -> str:
         skill_install_cmd=_SKILL_INSTALL_CMD,
         version_git_no_repo=version_git_no_repo,
         project_in_tmp=project_in_tmp,
+        has_docker_plug=has_docker_plug,
+        has_always_restart=has_always_restart,
     )
 
 

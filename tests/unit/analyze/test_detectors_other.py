@@ -148,12 +148,37 @@ class TestSystemdDetector:
         assert meta["daemon_type"] == "forking"
         assert meta["restart_condition"] == "always"
 
-    def test_notify_service(self, tmp_path):
+    def test_notify_service_without_source_downgraded_to_simple(self, tmp_path):
+        """Type=notify without sd_notify in source → downgraded to simple + warning."""
         (tmp_path / "notifier.service").write_text(
             "[Service]\nType=notify\nExecStart=/usr/bin/notifyd\n"
         )
         findings = SystemdDetector(tmp_path).detect()
-        assert findings[0].metadata["daemon_type"] == "notify"
+        daemon_findings = [f for f in findings if f.category == FindingCategory.DAEMON]
+        assert daemon_findings[0].metadata["daemon_type"] == "simple"
+        confinement_findings = [
+            f for f in findings if f.category == FindingCategory.CONFINEMENT
+        ]
+        assert any(
+            f.metadata.get("violation_type") == "notify-unverified"
+            for f in confinement_findings
+        )
+
+    def test_notify_service_with_sd_notify_source_kept_as_notify(self, tmp_path):
+        """Type=notify WITH sd_notify in source → daemon_type stays notify."""
+        (tmp_path / "notifier.service").write_text(
+            "[Service]\nType=notify\nExecStart=/usr/bin/notifyd\n"
+        )
+        (tmp_path / "notifier.py").write_text(
+            "import sdnotify\nn = sdnotify.SystemdNotifier()\nn.notify('READY=1')\n"
+        )
+        findings = SystemdDetector(tmp_path).detect()
+        daemon_findings = [f for f in findings if f.category == FindingCategory.DAEMON]
+        assert daemon_findings[0].metadata["daemon_type"] == "notify"
+        assert not any(
+            f.metadata.get("violation_type") == "notify-unverified"
+            for f in findings
+        )
 
     def test_user_root_emits_confinement_error(self, tmp_path):
         (tmp_path / "priv.service").write_text(
@@ -199,6 +224,44 @@ class TestSystemdDetector:
         )
         findings = SystemdDetector(tmp_path).detect()
         assert findings[0].metadata["name"] == "my-sensor"
+
+    def test_restart_always_emits_confinement_warning(self, tmp_path):
+        """Restart=always → CONFINEMENT WARNING with violation_type restart-always."""
+        (tmp_path / "looper.service").write_text(
+            "[Service]\nType=simple\nExecStart=/usr/bin/loop\nRestart=always\n"
+        )
+        findings = SystemdDetector(tmp_path).detect()
+        confinement = [
+            f for f in findings if f.category == FindingCategory.CONFINEMENT
+        ]
+        assert any(
+            f.metadata.get("violation_type") == "restart-always"
+            for f in confinement
+        )
+
+    def test_restart_on_failure_no_warning(self, tmp_path):
+        """Restart=on-failure → no restart-always warning emitted."""
+        (tmp_path / "myapp.service").write_text(
+            "[Service]\nType=simple\nExecStart=/usr/bin/myapp\nRestart=on-failure\n"
+        )
+        findings = SystemdDetector(tmp_path).detect()
+        assert not any(
+            f.metadata.get("violation_type") == "restart-always"
+            for f in findings
+        )
+
+    def test_notify_with_sd_notify_in_go_source(self, tmp_path):
+        """sd_notify in a Go source file keeps daemon_type as notify."""
+        (tmp_path / "app.service").write_text(
+            "[Service]\nType=notify\nExecStart=/usr/bin/myapp\n"
+        )
+        (tmp_path / "main.go").write_text(
+            'import "github.com/coreos/go-systemd/v22/daemon"\n'
+            'daemon.SdNotify(false, daemon.SdNotifyReady)\n'
+        )
+        findings = SystemdDetector(tmp_path).detect()
+        daemon_findings = [f for f in findings if f.category == FindingCategory.DAEMON]
+        assert daemon_findings[0].metadata["daemon_type"] == "notify"
 
 
 # ===========================================================================
