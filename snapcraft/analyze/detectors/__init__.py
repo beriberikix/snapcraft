@@ -48,9 +48,12 @@ from __future__ import annotations
 
 import abc
 import re
-from pathlib import Path
+from typing import TYPE_CHECKING
 
-from snapcraft.analyze.models import DetectorFinding
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from snapcraft.analyze.models import DetectorFinding
 
 
 class BaseDetector(abc.ABC):

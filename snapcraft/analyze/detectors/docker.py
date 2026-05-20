@@ -28,7 +28,7 @@ Parses a ``Dockerfile`` (or ``Dockerfile.*``) to extract:
 from __future__ import annotations
 
 import re
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from snapcraft.analyze.detectors import BaseDetector, registry
 from snapcraft.analyze.models import (
@@ -36,6 +36,9 @@ from snapcraft.analyze.models import (
     FindingCategory,
     Severity,
 )
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 # Mapping from well-known base images to the most likely snapcraft plugin.
 _IMAGE_TO_PLUGIN: dict[str, str] = {

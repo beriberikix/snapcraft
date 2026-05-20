@@ -33,10 +33,9 @@ Output formats:
 
 from __future__ import annotations
 
-import argparse
 import textwrap
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from craft_application.commands import AppCommand
 from craft_cli import emit
@@ -46,6 +45,9 @@ from typing_extensions import override
 from snapcraft.analyze.formatters import format_report
 from snapcraft.const import OUTPUT_FORMATS, OutputFormat
 from snapcraft.services.analyze import AnalyzeService
+
+if TYPE_CHECKING:
+    import argparse
 
 
 class AnalyzeCommand(AppCommand):

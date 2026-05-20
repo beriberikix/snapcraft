@@ -37,14 +37,13 @@ The ``Restart=`` value is mapped to ``restart-condition:``::
 from __future__ import annotations
 
 import configparser
-import io
 import re
 from pathlib import Path
 
 from snapcraft.analyze.detectors import BaseDetector, registry
 from snapcraft.analyze.models import (
-    DetectorFinding,
     DaemonInfo,
+    DetectorFinding,
     FindingCategory,
     Severity,
 )

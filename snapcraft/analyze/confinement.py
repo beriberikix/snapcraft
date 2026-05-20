@@ -35,7 +35,7 @@ Deep mode (``--deep`` flag):
 from __future__ import annotations
 
 import re
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from snapcraft.analyze.models import (
     AIActionItem,
@@ -44,6 +44,9 @@ from snapcraft.analyze.models import (
     FindingCategory,
     Severity,
 )
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 # Paths that are clearly problematic inside a strict snap.
 _HARDCODED_PATH_RE = re.compile(

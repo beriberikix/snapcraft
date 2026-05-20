@@ -102,7 +102,6 @@ class _ScaffoldGenerator:
     # ------------------------------------------------------------------
 
     def _add_metadata(self, doc: dict[str, Any]) -> None:
-        path = Path(self._report.path)
         snap_name = self._derive_snap_name()
 
         doc["name"] = snap_name

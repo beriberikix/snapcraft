@@ -27,9 +27,10 @@ Supported ecosystems:
 
 from __future__ import annotations
 
+import json
 import re
 import xml.etree.ElementTree as ET
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from snapcraft.analyze.detectors import BaseDetector, registry
 from snapcraft.analyze.models import (
@@ -38,6 +39,9 @@ from snapcraft.analyze.models import (
     FindingCategory,
     Severity,
 )
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 # ---------------------------------------------------------------------------
 # TOML helpers — tomllib is stdlib ≥ 3.11; fall back to regex for 3.10.
@@ -265,8 +269,6 @@ class NodeDetector(BaseDetector):
         if pkg_json is None:
             return []
 
-        import json
-
         try:
             data = json.loads(self._read_text(pkg_json))
         except (json.JSONDecodeError, OSError):
@@ -456,7 +458,7 @@ class MavenDetector(BaseDetector):
     def _parse_artifact_id(self, path: Path) -> str:
         text = self._read_text(path)
         try:
-            root = ET.fromstring(text)
+            root = ET.fromstring(text)  # noqa: S314 — pom.xml is developer-authored, not untrusted external input
             # Remove namespace prefix if present.
             ns = re.match(r"\{[^}]+\}", root.tag)
             prefix = ns.group(0) if ns else ""

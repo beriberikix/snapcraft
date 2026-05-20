@@ -18,10 +18,11 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from craft_cli import emit
 
+from snapcraft.analyze.confinement import build_confinement_warnings
 from snapcraft.analyze.detectors import registry
 from snapcraft.analyze.models import (
     AnalysisReport,
@@ -31,7 +32,9 @@ from snapcraft.analyze.models import (
     PlugInfo,
 )
 from snapcraft.analyze.scaffold import generate_scaffold
-from snapcraft.analyze.warnings import build_confinement_warnings
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 # ---------------------------------------------------------------------------
 # Interface plug inference

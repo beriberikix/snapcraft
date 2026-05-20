@@ -14,11 +14,11 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-"""Unit tests for :mod:`snapcraft.analyze.warnings`."""
+"""Unit tests for :mod:`snapcraft.analyze.confinement`."""
 
 import pytest
 
-from snapcraft.analyze.warnings import build_confinement_warnings
+from snapcraft.analyze.confinement import build_confinement_warnings
 
 
 class TestPrivilegedSocketDeduplication:

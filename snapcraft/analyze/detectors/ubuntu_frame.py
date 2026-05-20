@@ -45,9 +45,7 @@ Reference: https://canonical-ubuntu-frame-documentation.readthedocs-hosted.com/
 
 from __future__ import annotations
 
-import json
 import re
-from pathlib import Path
 
 from snapcraft.analyze.detectors import BaseDetector, registry
 from snapcraft.analyze.models import (
@@ -55,7 +53,6 @@ from snapcraft.analyze.models import (
     FindingCategory,
     Severity,
 )
-
 
 # ---------------------------------------------------------------------------
 # Toolkit fingerprints — checked against build config files (shallow scan).
