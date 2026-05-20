@@ -1,0 +1,289 @@
+.. meta::
+    :description: Reference for the snapcraft analyze command. Covers synopsis, options, JSON output schema, supported build-system ecosystems, and examples.
+
+.. _reference-analyze:
+
+``snapcraft analyze``
+=====================
+Analyses a local repository for snap packaging readiness.
+
+The command is non-destructive (read-only).  It never modifies the repository
+or creates any files.
+
+
+Synopsis
+--------
+
+.. code-block:: text
+
+    snapcraft analyze [PATH] [--format FORMAT] [--deep]
+
+
+Arguments
+---------
+
+.. list-table::
+   :header-rows: 1
+   :widths: 25 75
+
+   * - Argument
+     - Description
+   * - ``PATH``
+     - Path to the repository to analyse.  Defaults to the current directory
+       (``"."``).
+
+
+Options
+-------
+
+.. list-table::
+   :header-rows: 1
+   :widths: 25 75
+
+   * - Option
+     - Description
+   * - ``--format FORMAT``
+     - Output format.  ``table`` (default) prints human-readable sections to
+       the terminal.  ``json`` prints the full
+       :class:`~snapcraft.analyze.models.AnalysisReport` as indented JSON,
+       suitable for piping to ``jq`` or a downstream AI migration agent.
+   * - ``--deep``
+     - Enable exhaustive source-file scanning.  Without this flag only
+       build-configuration files are inspected.  With it, all source files
+       are scanned for hardcoded absolute paths and Wayland/EGL usage.
+       May be slow on large repositories.
+
+
+Output sections (table format)
+--------------------------------
+
+Build System
+   Detected language ecosystem, Snapcraft plugin, toolchain version (when
+   extractable), inferred entry-point commands, and typical
+   ``build-packages`` / ``stage-packages``.
+
+Ubuntu Frame (IoT GUI)
+   Shown when a graphical toolkit (Qt, GTK, Flutter, SDL2, Electron, or
+   native Wayland/EGL) is detected.  Indicates that the scaffold will use
+   the ``gpu-2404`` content interface + ``wayland-launch`` command-chain
+   template from the Ubuntu Frame IoT GUI pattern.
+
+Daemons
+   One row per ``*.service`` file found in the repository.  Shows the
+   mapped ``daemon:`` type, restart condition, inferred command, and any
+   hardware interface plugs inferred from the ``ExecStart=`` path.
+
+Inferred Interface Plugs
+   Snap interfaces the application is expected to need, with the auto-connect
+   status for each.
+
+Confinement Warnings
+   Strict-confinement violations found in the repository.  Each entry
+   includes the source file and line number, a description, and a suggested
+   fix.  Severity levels:
+
+   - ``[ERROR]`` — will cause AppArmor ``DENIED`` entries under strict
+     confinement; must be resolved before switching from ``devmode``.
+   - ``[WARNING]`` — likely problems; review carefully.
+
+Generated snap/snapcraft.yaml
+   A best-effort scaffold with ``TODO`` markers for any field that could not
+   be determined automatically.  Always sets ``base: core24``,
+   ``confinement: devmode``, and ``grade: devel`` as safe starting values.
+   The scaffold confidence percentage is shown in the section header.
+
+AI Action Items
+   Structured descriptions of every gap and blocker.  In ``--format json``
+   mode the ``ai_actions`` array carries the same information in a form
+   designed for consumption by AI migration agents.
+
+
+JSON output schema
+-------------------
+
+The root object is an ``AnalysisReport``.  Key fields:
+
+.. code-block:: json
+
+    {
+      "path": "/absolute/path/to/repo",
+      "build_systems": [
+        {
+          "name": "Go",
+          "plugin": "go",
+          "version": "1.22",
+          "entry_points": ["bin/myservice"],
+          "build_packages": [],
+          "stage_packages": [],
+          "confidence": 1.0
+        }
+      ],
+      "daemons": [
+        {
+          "name": "myservice",
+          "daemon_type": "simple",
+          "command": "bin/myservice",
+          "restart_condition": "on-failure",
+          "plugs": ["serial-port"],
+          "source_file": "myservice.service"
+        }
+      ],
+      "plugs": [
+        {
+          "name": "serial-port",
+          "reason": "Daemon accesses a serial device.",
+          "auto_connect": false
+        }
+      ],
+      "confinement_warnings": [
+        {
+          "violation_type": "hardcoded-path",
+          "description": "...",
+          "file": "src/config.go",
+          "line": 42,
+          "suggested_fix": "..."
+        }
+      ],
+      "scaffold": {
+        "yaml_content": "name: myservice\nbase: core24\n...",
+        "confidence": 0.9,
+        "gaps": []
+      },
+      "ai_actions": [
+        {
+          "category": "scaffold-gap:app-command",
+          "severity": "warning",
+          "description": "...",
+          "file": null,
+          "line": null,
+          "suggested_fix": "...",
+          "ai_prompt": "Determine the entry-point command ...",
+          "reference_url": "https://documentation.ubuntu.com/snapcraft/stable/"
+        }
+      ],
+      "raw_findings": [...],
+      "is_ubuntu_frame_app": false,
+      "is_headless_daemon": true
+    }
+
+
+Supported ecosystems
+---------------------
+
+Build-system detection
+~~~~~~~~~~~~~~~~~~~~~~~
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 30 40
+
+   * - Sentinel file(s)
+     - Ecosystem
+     - Plugin
+   * - ``go.mod``
+     - Go
+     - ``go``
+   * - ``pyproject.toml``, ``setup.py``, ``setup.cfg``
+     - Python (pip / Poetry / uv)
+     - ``python``, ``poetry``, or ``uv``
+   * - ``Cargo.toml``
+     - Rust
+     - ``rust``
+   * - ``package.json``
+     - Node.js
+     - ``npm``
+   * - ``CMakeLists.txt``
+     - CMake
+     - ``cmake``
+   * - ``Makefile`` / ``GNUmakefile``
+     - Make
+     - ``make``
+   * - ``configure.ac`` / ``configure.in``
+     - Autotools
+     - ``autotools``
+   * - ``meson.build``
+     - Meson
+     - ``meson``
+   * - ``pom.xml``
+     - Java/Maven
+     - ``maven``
+   * - ``build.gradle`` / ``build.gradle.kts``
+     - Java/Gradle
+     - ``gradle``
+   * - ``*.csproj`` / ``*.sln``
+     - .NET
+     - ``dotnet``
+
+Ubuntu Frame toolkit detection (shallow)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The following patterns trigger Ubuntu Frame scaffold mode when found in
+build-configuration files (``CMakeLists.txt``, ``meson.build``,
+``package.json``, ``pubspec.yaml``, etc.):
+
+- **Qt5 / Qt6** — ``find_package(Qt5|Qt6 … Wayland)``, ``QT += wayland``
+- **GTK 3 / 4** — ``pkg_check_modules(gtk+-3.0|gtk4)``,
+  ``dependency('gtk+-3.0')``
+- **Flutter** — ``sdk: flutter`` in ``pubspec.yaml``
+- **SDL2** — ``find_package(SDL2)``, ``dependency('sdl2')``
+- **Electron** — ``"electron"`` key in ``package.json``
+- **X11 / Mir** — ``find_package(X11)``
+
+With ``--deep``, C/C++ source files are also scanned for
+``#include <wayland-client.h>``, ``#include <EGL/egl.h>``, and related
+Wayland client API calls.
+
+Daemon detection
+~~~~~~~~~~~~~~~~
+
+Any ``*.service`` file found anywhere in the repository is parsed.  The
+``[Service]`` section's ``Type=``, ``ExecStart=``, and ``Restart=`` values
+are mapped to Snapcraft daemon configuration.
+
+Confinement warning patterns
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The following patterns trigger confinement warnings:
+
+- ``USER root`` or ``User=root`` (Dockerfile / systemd unit) — severity ERROR
+- Hardcoded absolute paths in ``COPY``, ``ADD``, ``RUN``, ``ENV``,
+  ``VOLUME`` Dockerfile instructions (with ``--deep``) — severity WARNING
+- Hardcoded absolute paths in source code (``--deep`` only) — severity WARNING
+- Privileged socket paths (``/var/run/docker.sock``, etc.) in source code
+  (``--deep`` only) — severity ERROR
+
+
+Examples
+---------
+
+Analyse the current directory:
+
+.. code-block:: bash
+
+    snapcraft analyze .
+
+Analyse a specific repository with deep scanning:
+
+.. code-block:: bash
+
+    snapcraft analyze ~/projects/my-iot-app --deep
+
+Output as JSON and extract only the AI action items:
+
+.. code-block:: bash
+
+    snapcraft analyze . --format json | jq '.ai_actions[]'
+
+Extract the generated scaffold YAML:
+
+.. code-block:: bash
+
+    snapcraft analyze . --format json | jq -r '.scaffold.yaml_content'
+
+
+See also
+---------
+
+- :ref:`how-to-analyze`
+- `Ubuntu Frame packaging guide <https://canonical-ubuntu-frame-documentation.readthedocs-hosted.com/how-to/packaging-iot-gui/packaging-an-application/>`_
+- `Snap interfaces reference <https://snapcraft.io/docs/supported-interfaces>`_

@@ -36,6 +36,7 @@ from .keys import (
     StoreSignBuildCommand,
 )
 from .lifecycle import PackCommand, SnapCommand, TryCommand
+from .analyze import AnalyzeCommand
 from .lint import LintCommand
 from .manage import (
     StoreCloseCommand,
@@ -80,6 +81,7 @@ from .validations import (
 from .metrics import StoreMetricsCommand
 
 __all__ = [
+    "AnalyzeCommand",
     "ExpandExtensionsCommand",
     "ExtensionsCommand",
     "LintCommand",
