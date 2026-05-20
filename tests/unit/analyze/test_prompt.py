@@ -438,3 +438,108 @@ class TestAnalyzeCommandPromptFormat:
         ):
             cmd.run(args)
         mock_fmt.assert_called_once_with(fake_report, OutputFormat.prompt)
+
+
+# ---------------------------------------------------------------------------
+# Pre-flight checklist section
+# ---------------------------------------------------------------------------
+
+
+class TestPreflightSection:
+    def test_preflight_section_always_present(self, tmp_path):
+        prompt = generate_prompt(_go_daemon_report(tmp_path))
+        assert "Pre-flight" in prompt
+
+    def test_lxd_multipass_guidance_always_present(self, tmp_path):
+        prompt = generate_prompt(_go_daemon_report(tmp_path))
+        assert "SNAPCRAFT_BUILD_ENVIRONMENT=multipass" in prompt
+        assert "lxd" in prompt.lower()
+
+    def test_version_git_warning_shown_when_no_git_dir(self, tmp_path):
+        # tmp_path has no .git — scaffold will contain version: git
+        report = _go_daemon_report(tmp_path)
+        prompt = generate_prompt(report)
+        assert "git init" in prompt
+
+    def test_version_git_warning_hidden_when_git_dir_exists(self, tmp_path):
+        (tmp_path / ".git").mkdir()
+        report = _go_daemon_report(tmp_path)
+        prompt = generate_prompt(report)
+        assert "git init" not in prompt
+
+    def test_tmp_path_warning_shown_for_tmp_project(self, tmp_path):
+        # Build a report whose path starts with /tmp
+        report = AnalysisReport(
+            path="/tmp/my-project",
+            build_systems=[BuildSystemInfo(name="Go", plugin="go")],
+            scaffold=ScaffoldResult(
+                yaml_content="name: my-project\nbase: core24\nversion: git\n",
+                confidence=0.9,
+            ),
+        )
+        prompt = generate_prompt(report)
+        assert "/tmp" in prompt
+        assert "Multipass cannot mount" in prompt or "outside" in prompt.lower()
+
+    def test_tmp_path_warning_absent_for_home_project(self, tmp_path):
+        # Use a path that does NOT start with /tmp
+        report = AnalysisReport(
+            path="/home/user/projects/my-app",
+            build_systems=[BuildSystemInfo(name="Go", plugin="go")],
+            scaffold=ScaffoldResult(
+                yaml_content="name: my-app\nbase: core24\nversion: git\n",
+                confidence=0.9,
+            ),
+        )
+        prompt = generate_prompt(report)
+        assert "Multipass cannot mount" not in prompt
+
+
+# ---------------------------------------------------------------------------
+# pkexec note present in install steps
+# ---------------------------------------------------------------------------
+
+
+class TestPkexecNote:
+    def test_pkexec_note_in_daemon_install_step(self, tmp_path):
+        prompt = generate_prompt(_go_daemon_report(tmp_path))
+        assert "pkexec" in prompt
+
+    def test_pkexec_note_in_frame_install_step(self, tmp_path):
+        prompt = generate_prompt(_ubuntu_frame_report(tmp_path))
+        assert "pkexec" in prompt
+
+    def test_pkexec_note_in_generic_install_step(self, tmp_path):
+        prompt = generate_prompt(_python_app_report(tmp_path))
+        assert "pkexec" in prompt
+
+    def test_pkexec_note_in_confinement_step(self, tmp_path):
+        prompt = generate_prompt(_go_daemon_report(tmp_path))
+        # The strict-confinement install step also has a pkexec note
+        assert "pkexec snap install --dangerous" in prompt
+
+
+# ---------------------------------------------------------------------------
+# Step numbering updated (4=preflight, 5=build, 6=install/smoke, 7=confinement,
+# 8=publish)
+# ---------------------------------------------------------------------------
+
+
+class TestStepNumbering:
+    def test_step_8_publish_present(self, tmp_path):
+        prompt = generate_prompt(_go_daemon_report(tmp_path))
+        assert "## Step 8" in prompt
+
+    def test_step_4_preflight_present(self, tmp_path):
+        prompt = generate_prompt(_go_daemon_report(tmp_path))
+        assert "## Step 4" in prompt
+
+    def test_step_5_build_present(self, tmp_path):
+        prompt = generate_prompt(_go_daemon_report(tmp_path))
+        assert "## Step 5" in prompt
+
+    def test_no_old_step_4_build_label(self, tmp_path):
+        """The old Step 4 build heading is gone; build is now Step 5."""
+        prompt = generate_prompt(_go_daemon_report(tmp_path))
+        # There should be no "Step 4 — Build" heading
+        assert "Step 4 — Build" not in prompt

@@ -87,6 +87,12 @@ class _ScaffoldGenerator:
         self._report = report
         self._gaps: list[str] = []
         self._ai_actions: list[AIActionItem] = []
+        # Counts only structural gaps (missing commands, unknown build system,
+        # etc.) for the confidence score.  Routine informational gaps like
+        # missing store metadata (title, contact, license) and pre-flight
+        # warnings (no .git directory) are excluded so they do not make an
+        # otherwise well-understood project look uncertain.
+        self._structural_gap_count: int = 0
 
     def generate(self) -> tuple[ScaffoldResult, list[AIActionItem]]:
         doc: dict[str, Any] = {}
@@ -125,9 +131,43 @@ class _ScaffoldGenerator:
         doc["name"] = snap_name
         doc["base"] = "core24"
         doc["version"] = self._derive_version()
+        doc["title"] = f"TODO: display title for {snap_name} (max 40 chars)"
         doc["summary"] = f"TODO: one-line summary for {snap_name} (max 79 chars)"
         doc["description"] = "TODO: describe what this snap does.\n"
+        doc["license"] = "TODO: SPDX expression (e.g. Apache-2.0, MIT, GPL-3.0)"
+        doc["contact"] = "TODO: contact URL or email for this snap"
         doc["grade"] = "devel"
+
+        for key, description, ai_prompt in (
+            (
+                "title",
+                f"Snap display title for '{snap_name}' not set.",
+                f"Set a human-readable display title for '{snap_name}' "
+                "(max 40 characters). Replace the TODO value for `title:` "
+                "in snapcraft.yaml.",
+            ),
+            (
+                "license",
+                f"SPDX license expression for '{snap_name}' not set.",
+                "Set the SPDX licence expression for this project "
+                "(e.g. `Apache-2.0`, `MIT`, `GPL-3.0-only`). "
+                "See https://spdx.org/licenses/ for the full list. "
+                "Replace the TODO value for `license:` in snapcraft.yaml.",
+            ),
+            (
+                "contact",
+                f"Contact information for '{snap_name}' not set.",
+                "Set the contact field to a URL or email address where "
+                "users can reach the snap publisher. "
+                "Replace the TODO value for `contact:` in snapcraft.yaml.",
+            ),
+        ):
+            self._note_gap(
+                f"metadata-{key}",
+                description,
+                ai_prompt=ai_prompt,
+                affects_confidence=False,
+            )
 
     def _derive_snap_name(self) -> str:
         """Infer the snap name from detected build systems or the directory."""
@@ -166,6 +206,23 @@ class _ScaffoldGenerator:
             bs = self._report.build_systems[0]
             if bs.version and bs.plugin in _release_version_plugins:
                 return bs.version
+        # version: git requires the project to be inside a git repository.
+        # Warn early if there is no .git directory so the user doesn't
+        # discover this only after a full build cycle.
+        if not (Path(self._report.path) / ".git").exists():
+            self._note_gap(
+                "version-git-no-repo",
+                "version: git requires a git repository; none found at the project root.",
+                ai_prompt=(
+                    "The scaffold uses `version: git` which requires the project "
+                    "to be inside a git repository, but no .git directory was found. "
+                    "Either initialise a repository:\n"
+                    "  git init && git add -A && git commit -m 'Initial commit'\n"
+                    "Or replace `version: git` with an explicit version string "
+                    "(e.g. `version: '1.0.0'`) in snapcraft.yaml."
+                ),
+                affects_confidence=False,
+            )
         return "git"
 
     def _add_confinement(self, doc: dict[str, Any]) -> None:
@@ -460,9 +517,27 @@ class _ScaffoldGenerator:
     # Helpers
     # ------------------------------------------------------------------
 
-    def _note_gap(self, key: str, description: str, *, ai_prompt: str) -> None:
-        """Record a gap and create a corresponding AIActionItem."""
+    def _note_gap(
+        self,
+        key: str,
+        description: str,
+        *,
+        ai_prompt: str,
+        affects_confidence: bool = True,
+    ) -> None:
+        """Record a gap and create a corresponding AIActionItem.
+
+        :param key: Short machine-readable identifier (used as the action category).
+        :param description: Human-readable gap description added to the gaps list.
+        :param ai_prompt: Detailed prompt for an AI agent to resolve the gap.
+        :param affects_confidence: When ``False`` the gap is recorded and
+            surfaced to the user but does not reduce the confidence score.
+            Use this for routine informational gaps (store metadata, pre-flight
+            warnings) that do not reflect uncertainty about the build structure.
+        """
         self._gaps.append(description)
+        if affects_confidence:
+            self._structural_gap_count += 1
         self._ai_actions.append(
             AIActionItem(
                 category=f"scaffold-gap:{key}",
@@ -477,10 +552,15 @@ class _ScaffoldGenerator:
         )
 
     def _compute_confidence(self) -> float:
-        """Compute an overall confidence score for the scaffold."""
+        """Compute an overall confidence score for the scaffold.
+
+        Only structural gaps (missing build commands, unknown build system,
+        etc.) reduce confidence.  Informational gaps like store-metadata
+        placeholders are excluded so they do not mask a well-understood project.
+        """
         score = 1.0
-        # Each gap reduces confidence.
-        score -= min(len(self._gaps) * 0.1, 0.5)
+        # Each structural gap reduces confidence.
+        score -= min(self._structural_gap_count * 0.1, 0.5)
         # No build system detected is a big penalty.
         if not self._report.build_systems:
             score -= 0.3

@@ -155,7 +155,41 @@ each plugin and interface.
 
 ---
 
-## Step 4 — Build the snap
+## Step 4 — Pre-flight checks
+
+Before running `snapcraft`, verify the following:
+{% if version_git_no_repo %}
+- [ ] **Git repository required** — the scaffold uses `version: git` but no
+  `.git` directory was found at `{{ project_path }}`.  Either initialise a
+  repository:
+  ```
+  git init && git add -A && git commit -m "Initial commit"
+  ```
+  or replace `version: git` with an explicit version string in
+  `snapcraft.yaml` (e.g. `version: '1.0.0'`).
+{% endif %}
+{% if project_in_tmp %}
+- [ ] **Move project out of /tmp** — Multipass cannot mount paths outside
+  your home directory; `/tmp` paths appear not to exist inside the VM.
+  Copy the project first:
+  ```
+  cp -r {{ project_path }} ~/{{ snap_name }}
+  cd ~/{{ snap_name }}
+  ```
+{% endif %}
+- [ ] **Build provider** — Snapcraft defaults to LXD.  If LXD is installed
+  but your user is not in the `lxd` group, either fix the membership:
+  ```
+  sudo usermod -aG lxd $USER && newgrp lxd
+  ```
+  or force Multipass instead:
+  ```
+  SNAPCRAFT_BUILD_ENVIRONMENT=multipass snapcraft
+  ```
+
+---
+
+## Step 5 — Build the snap
 
 Run snapcraft from the project root (inside a Multipass VM or LXD container if
 on a non-Ubuntu host):
@@ -173,7 +207,7 @@ Fix any build errors iteratively.  Common issues:
 
 ---
 
-## Step 5 — Install and smoke-test
+## Step 6 — Install and smoke-test
 {% if is_headless_daemon %}
 Install the snap in devmode and verify the daemon starts:
 
@@ -185,6 +219,9 @@ journalctl -u snap.{{ snap_name }}.{{ d.name }} -f
 {% endfor %}
 ```
 
+> **No TTY?** Use `pkexec snap install --devmode *.snap` instead of
+> `sudo snap install`.
+
 Check that the service starts, stays running, and produces expected log output.
 {% elif is_ubuntu_frame_app %}
 Install the snap in devmode and test with Ubuntu Frame:
@@ -195,6 +232,9 @@ sudo snap install --devmode *.snap
 sudo snap set ubuntu-frame daemon=true
 ```
 
+> **No TTY?** Use `pkexec snap install --devmode *.snap` instead of
+> `sudo snap install`.
+
 Verify the application launches and renders correctly in the Frame kiosk.
 {% else %}
 Install the snap in devmode and run it:
@@ -204,13 +244,16 @@ sudo snap install --devmode *.snap
 snap run {{ snap_name }}
 ```
 
+> **No TTY?** Use `pkexec snap install --devmode *.snap` instead of
+> `sudo snap install`.
+
 Verify the application starts, behaves correctly, and produces no unexpected
 errors.
 {% endif %}
 
 ---
 
-## Step 6 — Tighten confinement
+## Step 7 — Tighten confinement
 
 The scaffold starts with `confinement: devmode` so that the snap can run
 without interface restrictions during development.  Once the snap works in
@@ -223,6 +266,7 @@ devmode, switch to strict confinement:
    ```
    sudo snap install --dangerous *.snap
    ```
+   > **No TTY?** Use `pkexec snap install --dangerous *.snap`.
 4. Run `snappy-debug` in a separate terminal to capture denied syscalls and
    interface accesses:
    ```
@@ -237,7 +281,7 @@ devmode, switch to strict confinement:
 
 ---
 
-## Step 7 — Publish to the Snap Store
+## Step 8 — Publish to the Snap Store
 
 Once the snap passes all tests under strict confinement:
 
@@ -291,6 +335,14 @@ def generate_prompt(report: AnalysisReport) -> str:
     gaps = report.scaffold.gaps if report.scaffold else []
     scaffold_yaml = report.scaffold.yaml_content if report.scaffold else ""
 
+    # Derive pre-flight booleans from the report.
+    # version: git needs a git repo; check directly so we don't parse strings.
+    version_git_no_repo = (
+        "version: git" in scaffold_yaml
+        and not (Path(report.path) / ".git").exists()
+    )
+    project_in_tmp = report.path.startswith("/tmp")  # noqa: S108
+
     return template.render(
         snap_name=snap_name,
         project_path=report.path,
@@ -304,6 +356,8 @@ def generate_prompt(report: AnalysisReport) -> str:
         gaps=gaps,
         scaffold_yaml=scaffold_yaml,
         skill_install_cmd=_SKILL_INSTALL_CMD,
+        version_git_no_repo=version_git_no_repo,
+        project_in_tmp=project_in_tmp,
     )
 
 

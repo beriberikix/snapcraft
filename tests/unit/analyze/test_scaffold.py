@@ -258,3 +258,88 @@ class TestScaffoldFallback:
         result, _ = generate_scaffold(report)
         doc = yaml.safe_load(result.yaml_content)
         assert doc["name"] == "my-cool-service"
+
+
+class TestScaffoldMetadataFields:
+    """title, license, and contact appear as TODO fields in every scaffold."""
+
+    def test_title_in_scaffold(self, tmp_path):
+        result, _ = generate_scaffold(_go_report(tmp_path))
+        doc = yaml.safe_load(result.yaml_content)
+        assert "title" in doc
+        assert "TODO" in doc["title"]
+
+    def test_license_in_scaffold(self, tmp_path):
+        result, _ = generate_scaffold(_go_report(tmp_path))
+        doc = yaml.safe_load(result.yaml_content)
+        assert "license" in doc
+        assert "TODO" in doc["license"]
+
+    def test_contact_in_scaffold(self, tmp_path):
+        result, _ = generate_scaffold(_go_report(tmp_path))
+        doc = yaml.safe_load(result.yaml_content)
+        assert "contact" in doc
+        assert "TODO" in doc["contact"]
+
+    def test_metadata_gaps_recorded(self, tmp_path):
+        result, _ = generate_scaffold(_go_report(tmp_path))
+        gap_text = " ".join(result.gaps)
+        assert "title" in gap_text.lower()
+        assert "license" in gap_text.lower()
+        assert "contact" in gap_text.lower()
+
+    def test_metadata_gaps_do_not_reduce_confidence(self, tmp_path):
+        """title/license/contact gaps must not penalise build confidence."""
+        result_with_git, _ = generate_scaffold(_daemon_report(tmp_path))
+        # The daemon report has a full build system + command — only metadata
+        # gaps should be present.  Confidence must still be high.
+        assert result_with_git.confidence >= 0.8
+
+    def test_metadata_ai_actions_present(self, tmp_path):
+        _, ai_actions = generate_scaffold(_go_report(tmp_path))
+        categories = {a.category for a in ai_actions}
+        assert "scaffold-gap:metadata-title" in categories
+        assert "scaffold-gap:metadata-license" in categories
+        assert "scaffold-gap:metadata-contact" in categories
+
+
+class TestVersionGitNoRepo:
+    """version: git gap is emitted when no .git directory is present."""
+
+    def test_gap_emitted_when_no_git_dir(self, tmp_path):
+        # tmp_path has no .git directory
+        result, _ = generate_scaffold(_go_report(tmp_path))
+        assert any("git repository" in g for g in result.gaps)
+
+    def test_no_gap_when_git_dir_exists(self, tmp_path):
+        (tmp_path / ".git").mkdir()
+        result, _ = generate_scaffold(_go_report(tmp_path))
+        assert not any("git repository" in g for g in result.gaps)
+
+    def test_no_gap_for_python_with_explicit_version(self, tmp_path):
+        """Python projects get an explicit version — no version: git gap."""
+        report = AnalysisReport(
+            path=str(tmp_path),
+            build_systems=[
+                BuildSystemInfo(
+                    name="Python/pip",
+                    plugin="python",
+                    version="1.2.3",
+                )
+            ],
+        )
+        result, _ = generate_scaffold(report)
+        assert not any("git repository" in g for g in result.gaps)
+
+    def test_git_no_repo_gap_does_not_reduce_confidence(self, tmp_path):
+        """Missing .git must not reduce build-correctness confidence."""
+        # tmp_path has no .git — gap fires but confidence unaffected
+        result_no_git, _ = generate_scaffold(_daemon_report(tmp_path))
+        (tmp_path / ".git").mkdir()
+        result_with_git, _ = generate_scaffold(_daemon_report(tmp_path))
+        assert result_no_git.confidence == result_with_git.confidence
+
+    def test_git_no_repo_ai_action_present(self, tmp_path):
+        _, ai_actions = generate_scaffold(_go_report(tmp_path))
+        categories = {a.category for a in ai_actions}
+        assert "scaffold-gap:version-git-no-repo" in categories
