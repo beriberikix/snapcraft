@@ -57,6 +57,27 @@ _DAEMON_TYPE_MAP: dict[str, str] = {
     "idle": "simple",
 }
 
+# Patterns that indicate a service actively calls sd_notify to signal
+# readiness. We search all source files for these; if none is found for a
+# Type=notify unit, the daemon type is downgraded to 'simple' and a
+# CONFINEMENT warning is emitted so the user knows why.
+_NOTIFY_SIGNAL_RE = re.compile(
+    r"sd_notify|sdnotify|systemd\.daemon|READY=1|notify_socket",
+    re.IGNORECASE,
+)
+
+# Directories to skip when scanning source files for sd_notify signals.
+_SOURCE_SKIP_DIRS = frozenset(
+    {".git", ".hg", ".svn", "node_modules", "vendor", "__pycache__",
+     ".tox", ".venv", "venv", "env", "dist", "build", "target",
+     ".mypy_cache", ".pytest_cache"}
+)
+
+# Source file extensions to scan for readiness notification patterns.
+_NOTIFY_SOURCE_EXTENSIONS = (
+    "*.py", "*.go", "*.rs", "*.c", "*.cpp", "*.h", "*.js", "*.ts", "*.sh",
+)
+
 _RESTART_MAP: dict[str, str] = {
     "always": "always",
     "on-failure": "on-failure",
@@ -83,12 +104,33 @@ class SystemdDetector(BaseDetector):
         if not service_files:
             return []
 
+        # Compute the source notification scan once so that repositories with
+        # multiple Type=notify units don't trigger O(N_services × repo_size)
+        # full-tree scans.
+        notify_in_source = self._check_notify_in_source()
+
         findings: list[DetectorFinding] = []
         for service_file in service_files:
-            findings.extend(self._analyse_service(service_file))
+            findings.extend(self._analyse_service(service_file, notify_in_source))
         return findings
 
-    def _analyse_service(self, path: Path) -> list[DetectorFinding]:
+    def _check_notify_in_source(self) -> bool:
+        """Return True if any source file contains a readiness-notification call.
+
+        Scans common source file types for ``sd_notify``, ``sdnotify``,
+        ``systemd.daemon``, ``READY=1``, or ``notify_socket``.  Returns
+        ``False`` if none is found (caller should downgrade ``daemon: notify``
+        to ``daemon: simple``).
+        """
+        for ext in _NOTIFY_SOURCE_EXTENSIONS:
+            for src_file in self._path.rglob(ext):
+                if any(part in _SOURCE_SKIP_DIRS for part in src_file.parts):
+                    continue
+                if _NOTIFY_SIGNAL_RE.search(self._read_text(src_file)):
+                    return True
+        return False
+
+    def _analyse_service(self, path: Path, notify_in_source: bool) -> list[DetectorFinding]:
         text = self._read_text(path)
         # configparser needs a dummy section header for bare INI files,
         # but .service files have real [Unit], [Service], [Install] sections.
@@ -113,6 +155,15 @@ class SystemdDetector(BaseDetector):
         rel_path = str(path.relative_to(self._path))
         findings: list[DetectorFinding] = []
 
+        # Validate daemon: notify — if no readiness-notification call is found
+        # in the source, downgrade to daemon: simple and emit a warning so the
+        # user knows why.  A Type=notify daemon that never calls sd_notify will
+        # be killed by systemd on every start.
+        notify_unverified = False
+        if daemon_type == "notify" and not notify_in_source:
+            daemon_type = "simple"
+            notify_unverified = True
+
         daemon_info = DaemonInfo(
             name=app_name,
             daemon_type=daemon_type,
@@ -132,6 +183,40 @@ class SystemdDetector(BaseDetector):
                 metadata=daemon_info.model_dump(),
             )
         )
+
+        if notify_unverified:
+            findings.append(
+                DetectorFinding(
+                    category=FindingCategory.CONFINEMENT,
+                    severity=Severity.WARNING,
+                    description=(
+                        f"Systemd unit '{path.name}' declares Type=notify but "
+                        "no sd_notify / sdnotify / READY=1 call was found in "
+                        "the source. Defaulted to daemon: simple. Add a "
+                        "readiness-notification call or change Type=simple in "
+                        "the service file."
+                    ),
+                    file=rel_path,
+                    metadata={"violation_type": "notify-unverified"},
+                )
+            )
+
+        if restart == "always":
+            findings.append(
+                DetectorFinding(
+                    category=FindingCategory.CONFINEMENT,
+                    severity=Severity.WARNING,
+                    description=(
+                        f"Systemd unit '{path.name}' sets Restart=always. "
+                        "This restarts the service even on a clean exit "
+                        "(code 0). If the daemon can exit intentionally, "
+                        "this will trigger a restart loop and hit the "
+                        "start-limit. Consider restart-condition: on-failure."
+                    ),
+                    file=rel_path,
+                    metadata={"violation_type": "restart-always"},
+                )
+            )
 
         if user.lower() in ("root", "0"):
             findings.append(

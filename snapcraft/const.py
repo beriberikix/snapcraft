@@ -97,6 +97,7 @@ class OutputFormat(str, enum.Enum):
     """Output formats for snapcraft commands."""
 
     json = "json"
+    prompt = "prompt"
     table = "table"
 
     def __str__(self) -> str:
@@ -104,8 +105,13 @@ class OutputFormat(str, enum.Enum):
         return str(self.value)
 
 
-OUTPUT_FORMATS = frozenset(output_format.value for output_format in OutputFormat)
-"""Supported output formats for commands."""
+OUTPUT_FORMATS = frozenset(
+    f.value for f in OutputFormat if f != OutputFormat.prompt
+)
+"""Supported output formats for general commands (excludes analyze-only formats)."""
+
+ANALYZE_OUTPUT_FORMATS = frozenset(f.value for f in OutputFormat)
+"""All output formats supported by ``snapcraft analyze``."""
 
 CURRENT_BASES = frozenset(b.value for b in (*StableBase, *UnstableBase))
 """Bases handled by the current snapcraft codebase."""

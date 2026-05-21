@@ -52,6 +52,16 @@ try:
 except ImportError:  # Python 3.10
     _tomllib = None  # type: ignore[assignment]
 
+# Directories that should NOT be checked for missing __init__.py — they are
+# either not importable Python packages or are managed by tooling that does
+# not require __init__.py.
+_PYTHON_SKIP_DIRS = frozenset({
+    "tests", "test", "docs", "doc", "examples", "example", "scripts",
+    "script", "conf", "config", "data", "assets", "migrations",
+    ".git", ".hg", ".venv", "venv", "env", ".tox",
+    "dist", "build", "target", "__pycache__", "node_modules",
+})
+
 
 def _parse_toml(path: Path) -> dict:  # type: ignore[type-arg]
     """Parse a TOML file, returning an empty dict on failure."""
@@ -149,7 +159,54 @@ class PythonDetector(BaseDetector):
                     )
                 )
 
+        if findings:
+            # Only check for missing __init__.py when we've confirmed this is
+            # a Python project.
+            findings.extend(self._check_missing_init_py())
+
         return findings
+
+    def _check_missing_init_py(self) -> list[DetectorFinding]:
+        """Flag Python package directories that are missing ``__init__.py``.
+
+        A package directory without ``__init__.py`` can cause import failures
+        at runtime, especially when the snap's Python environment differs from
+        the development environment.  Modern packaging tools (setuptools ≥ 61,
+        hatchling) support "implicit namespace packages" but the behaviour is
+        fragile — an explicit ``__init__.py`` is always safer.
+        """
+        result: list[DetectorFinding] = []
+        try:
+            for candidate in self._path.iterdir():
+                if not candidate.is_dir():
+                    continue
+                if candidate.name.startswith(".") or candidate.name in _PYTHON_SKIP_DIRS:
+                    continue
+                # Only flag directories that contain at least one non-init .py file.
+                py_files = [
+                    f for f in candidate.glob("*.py")
+                    if f.name != "__init__.py"
+                ]
+                if py_files and not (candidate / "__init__.py").exists():
+                    result.append(
+                        DetectorFinding(
+                            category=FindingCategory.CONFINEMENT,
+                            severity=Severity.WARNING,
+                            description=(
+                                f"Python package directory '{candidate.name}/' "
+                                "has no __init__.py — the package may not be "
+                                "importable at snap runtime."
+                            ),
+                            file=f"{candidate.name}/__init__.py",
+                            metadata={
+                                "violation_type": "missing-init-py",
+                                "directory": candidate.name,
+                            },
+                        )
+                    )
+        except OSError:
+            pass
+        return result
 
     def _from_pyproject(self, path: Path) -> list[DetectorFinding]:
         data = _parse_toml(path)
