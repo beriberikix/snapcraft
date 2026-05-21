@@ -213,7 +213,8 @@ class TestPromptIncludesDraftScaffold:
     def test_scaffold_yaml_absent_when_no_scaffold(self, tmp_path):
         report = AnalysisReport(path=str(tmp_path))
         prompt = generate_prompt(report)
-        # No YAML block should be embedded when there is no scaffold.
+        # No YAML code fence or snap name should appear when there is no scaffold.
+        assert "```yaml" not in prompt
         assert "name:" not in prompt
 
 
@@ -628,7 +629,8 @@ class TestDockerPlugNote:
 
     def test_docker_note_absent_when_no_docker_plug(self, tmp_path):
         prompt = generate_prompt(_python_app_report(tmp_path))
-        assert "docker snap" not in prompt.lower() or "docker" not in prompt
+        # The Docker interface note must not appear when no docker plug is present.
+        assert "Docker interface" not in prompt
 
 
 # ---------------------------------------------------------------------------
@@ -681,9 +683,9 @@ class TestRestartAlwaysNote:
 
     def test_restart_always_note_absent_for_on_failure(self, tmp_path):
         prompt = generate_prompt(_go_daemon_report(tmp_path))
-        # _go_daemon_report uses restart_condition="on-failure"
-        # The note should not appear
-        assert "restart-condition: always" not in prompt or "on-failure" in prompt
+        # _go_daemon_report uses restart_condition="on-failure"; the note
+        # must be completely absent (its unique heading identifies the block).
+        assert "Note on `restart-condition: always`" not in prompt
 
 
 # ---------------------------------------------------------------------------

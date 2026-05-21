@@ -1,5 +1,5 @@
 .. meta::
-    :description: How to use snapcraft analyze to inspect a repository for snap packaging readiness, interpret the output, and generate a best-effort snapcraft.yaml scaffold or an AI coding agent prompt.
+    :description: How to use snapcraft analyze to inspect a repository for snap packaging readiness, interpret the output, and generate a snapcraft.yaml scaffold or AI agent prompt.
 
 .. _how-to-analyze:
 

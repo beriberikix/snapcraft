@@ -152,10 +152,13 @@ def build_confinement_warnings(
 
     # ------------------------------------------------------------------ #
     # Pass 2: always-on shallow Python source scan (depth 0 + 1).        #
+    # Skipped when --deep is active to avoid duplicate warnings for the   #
+    # same Python files (the deep scan covers all depths including .py).  #
     # ------------------------------------------------------------------ #
-    shallow_warnings, shallow_actions = _scan_python_shallow(path)
-    warnings.extend(shallow_warnings)
-    ai_actions.extend(shallow_actions)
+    if not deep:
+        shallow_warnings, shallow_actions = _scan_python_shallow(path)
+        warnings.extend(shallow_warnings)
+        ai_actions.extend(shallow_actions)
 
     # ------------------------------------------------------------------ #
     # Pass 3: deep source-file scan (opt-in).                             #
@@ -190,8 +193,10 @@ def _finding_to_warning_and_action(
 
     elif violation_type == "notify-unverified":
         fix = (
-            "Either add a readiness-notification call to the Python source "
-            "(e.g. `import sdnotify; sdnotify.SystemdNotifier().notify('READY=1')`) "
+            "Either add a readiness-notification call to the service's startup "
+            "code (Python: `import sdnotify; sdnotify.SystemdNotifier().notify"
+            "('READY=1')`, Go: `daemon.SdNotify(false, daemon.SdNotifyReady)`, "
+            'C: `sd_notify(0, "READY=1");`) '
             "or change `daemon: notify` to `daemon: simple` in snapcraft.yaml."
         )
         prompt = (
@@ -199,11 +204,14 @@ def _finding_to_warning_and_action(
             "sd_notify / sdnotify / READY=1 call was found in the source. "
             "A daemon: notify service that never calls sd_notify will be "
             "killed by snapd on every start. Either:\n"
-            "1. Add readiness notification:\n"
-            "   `import sdnotify; n = sdnotify.SystemdNotifier(); "
-            "n.notify('READY=1')`\n"
-            "2. Or use `daemon: simple` in snapcraft.yaml (simpler, no "
-            "readiness notification required)."
+            "1. Add readiness notification. Language examples:\n"
+            "   Python:  import sdnotify; sdnotify.SystemdNotifier().notify('READY=1')\n"
+            "   Go:      daemon.SdNotify(false, daemon.SdNotifyReady)  "
+            "(pkg: github.com/coreos/go-systemd/v22/daemon)\n"
+            '   C/C++:   sd_notify(0, "READY=1");  (link with -lsystemd)\n'
+            "   Rust:    libsystemd::daemon::notify(false, &[NotifyState::Ready]);\n"
+            "2. Or use `daemon: simple` in snapcraft.yaml "
+            "(simpler, no readiness notification required)."
         )
         ref = "https://snapcraft.io/docs/services-and-daemons"
 

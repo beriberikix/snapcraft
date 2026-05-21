@@ -1,5 +1,5 @@
 .. meta::
-    :description: Reference for the snapcraft analyze command. Covers synopsis, options, output formats (table, json, prompt), JSON output schema, supported build-system ecosystems, and examples.
+    :description: Reference for snapcraft analyze: synopsis, options, output formats (table, json, prompt), JSON schema, supported ecosystems, and examples.
 
 .. _reference-analyze:
 

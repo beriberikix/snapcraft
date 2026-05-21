@@ -41,8 +41,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import jinja2
-
 if TYPE_CHECKING:
     from snapcraft.analyze.models import AnalysisReport
 
@@ -53,6 +51,9 @@ if TYPE_CHECKING:
 _SKILL_INSTALL_CMD = (
     "npx skills add canonical/skills-playground --skill snapcraft-packaging"
 )
+
+# Plug names that require the docker snap slot (not apt docker).
+_DOCKER_PLUG_NAMES = frozenset({"docker", "docker-support"})
 
 _PROMPT_TEMPLATE = """\
 # Snap Packaging Plan for `{{ snap_name }}`
@@ -154,10 +155,17 @@ each plugin and interface.
 > systemd's start-limit and generate restart-loop alerts. Use
 > `restart-condition: on-failure` unless the service must always restart.
 {% endif %}
+{% if scaffold_yaml %}
 
 ```yaml
 {{ scaffold_yaml | indent(0) }}
 ```
+{% else %}
+
+*No scaffold was generated — the analyser could not identify a build system.
+Consult the [Snapcraft documentation](https://documentation.ubuntu.com/snapcraft/stable/)
+for a manual starting template.*
+{% endif %}
 
 ---
 
@@ -366,6 +374,8 @@ def generate_prompt(report: AnalysisReport) -> str:
     :param report: Completed :class:`~snapcraft.analyze.models.AnalysisReport`.
     :returns: A Markdown string suitable for pasting into any AI coding agent.
     """
+    import jinja2  # noqa: PLC0415 — deferred: only needed for --format prompt
+
     env = jinja2.Environment(  # noqa: S701 — trusted template, no user input
         keep_trailing_newline=True,
         trim_blocks=True,
@@ -389,8 +399,19 @@ def generate_prompt(report: AnalysisReport) -> str:
     project_in_tmp = report.path.startswith("/tmp")  # noqa: S108
 
     # Docker plug requires the docker snap slot — warn when detected.
-    has_docker_plug = any(
-        p.name in ("docker", "docker-support") for p in report.plugs
+    # Check report.plugs, daemon-level plugs, AND confinement warnings that
+    # reference docker.sock (the plug inference may not surface it in all paths).
+    has_docker_plug = (
+        any(p.name in _DOCKER_PLUG_NAMES for p in report.plugs)
+        or any(
+            plug in _DOCKER_PLUG_NAMES
+            for d in report.daemons
+            for plug in (d.plugs or [])
+        )
+        or any(
+            "docker.sock" in (w.description or "")
+            for w in report.confinement_warnings
+        )
     )
 
     # restart-condition: always can cause restart loops — flag for review.

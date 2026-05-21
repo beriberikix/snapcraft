@@ -104,9 +104,14 @@ class SystemdDetector(BaseDetector):
         if not service_files:
             return []
 
+        # Compute the source notification scan once so that repositories with
+        # multiple Type=notify units don't trigger O(N_services × repo_size)
+        # full-tree scans.
+        notify_in_source = self._check_notify_in_source()
+
         findings: list[DetectorFinding] = []
         for service_file in service_files:
-            findings.extend(self._analyse_service(service_file))
+            findings.extend(self._analyse_service(service_file, notify_in_source))
         return findings
 
     def _check_notify_in_source(self) -> bool:
@@ -125,7 +130,7 @@ class SystemdDetector(BaseDetector):
                     return True
         return False
 
-    def _analyse_service(self, path: Path) -> list[DetectorFinding]:
+    def _analyse_service(self, path: Path, notify_in_source: bool) -> list[DetectorFinding]:
         text = self._read_text(path)
         # configparser needs a dummy section header for bare INI files,
         # but .service files have real [Unit], [Service], [Install] sections.
@@ -155,7 +160,7 @@ class SystemdDetector(BaseDetector):
         # user knows why.  A Type=notify daemon that never calls sd_notify will
         # be killed by systemd on every start.
         notify_unverified = False
-        if daemon_type == "notify" and not self._check_notify_in_source():
+        if daemon_type == "notify" and not notify_in_source:
             daemon_type = "simple"
             notify_unverified = True
 
